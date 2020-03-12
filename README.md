@@ -1,6 +1,7 @@
 # tghistory
 
 Import Telegram message history into a PostgreSQL DB
+Accompanying blog article: http://logic-explained.blogspot.com/2020/03/telegram-chats-history-analysis.html
 
 ## Setup 
 
