@@ -1,9 +1,6 @@
 drop table if exists messages; -- comment out once schema is stable
 drop table if exists chats; -- comment out once schema is stable
 drop table if exists users; -- comment out once schema is stable
-drop type if exists dow;
-
-create type dow as enum ('Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday');
 
 create table if not exists messages (
     id bigint primary key,
