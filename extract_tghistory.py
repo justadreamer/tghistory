@@ -82,7 +82,7 @@ tg = Telegram(
     api_hash=API_HASH,
     phone=USER_PHONE,
     database_encryption_key='',
-    use_message_database=True
+    use_message_database=False
 )
 
 pp = pprint.PrettyPrinter(indent=2)
