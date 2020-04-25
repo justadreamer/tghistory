@@ -212,6 +212,39 @@ GROUP BY
 ORDER BY
     message_count DESC;
 
+-- let's also add a year
+
+-- Let's research the activity by months of the year:
+-- What is the most active month of the year in a given chat?
+WITH
+    CHAT_TITLE(chat_title) AS (SELECT 'Telegram'),
+    SELECTION(year, month, mid) AS (
+        SELECT
+            to_char(m.send_date, 'yyyy'),
+            to_char(m.send_date, 'Month'),
+            m.id
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        WHERE
+            c.title = chat_title
+    ),
+    TOTAL(total_count) AS (SELECT COUNT(mid) FROM SELECTION)
+SELECT
+    year,
+    month,
+    COUNT(mid) message_count,
+    round(CAST(COUNT(mid) AS numeric) / total_count * 100, 2) prop
+FROM
+   TOTAL, SELECTION
+GROUP BY
+    (year, month, total_count)
+ORDER BY
+    message_count DESC;
+
 -- but here the data is severely skewed due to recent higher activity,
 -- however let's also group by people and order them appropriately:
 WITH
@@ -317,3 +350,121 @@ GROUP BY
     (umessage_count, username, first_name, last_name, content_type, total_count)
 ORDER BY
     umessage_count DESC, message_count DESC;
+
+
+
+-- How often is coronavirus is mentioned each month:
+-- Let's research the activity by months of the year:
+-- What is the most active month of the year in a given chat?
+WITH
+    CHAT_TITLE(chat_title) AS (SELECT 'Telegram'),
+    SELECTION(month, mid) AS (
+        SELECT
+            to_char(m.send_date, 'Month'),
+            m.id
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        WHERE
+            c.title = chat_title
+            AND (m.message_text like '%коронави%' OR m.message_text like '%коронови%' OR m.message_text like '%вирус%')
+    ),
+    TOTAL(total_count) AS (SELECT COUNT(mid) FROM SELECTION)
+SELECT
+    month,
+    COUNT(mid) message_count,
+    round(CAST(COUNT(mid) AS numeric) / total_count * 100, 2) prop
+FROM
+   TOTAL, SELECTION
+GROUP BY
+    (month, total_count)
+ORDER BY
+    message_count DESC;
+
+
+-- Message lengths by user
+WITH
+    CHAT_TITLE(chat_title) AS (SELECT 'Telegram'),
+    SELECTION(first_name, last_name, username, text_length) AS (
+        SELECT
+            u.first_name,
+            u.last_name,
+            u.username,
+            length(m.message_text)
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        INNER JOIN
+            users u
+            ON u.id = m.sender_user_id
+        WHERE
+            c.title = chat_title AND
+            m.content_type = 'messageText'
+    )
+SELECT
+    first_name,
+    last_name,
+    username,
+    text_length
+FROM
+   SELECTION;
+
+
+WITH
+    CHAT_TITLE(chat_title) AS (SELECT 'Telegram'),
+    SELECTION(first_name, last_name, username, text_length) AS (
+        SELECT
+            u.first_name,
+            u.last_name,
+            u.username,
+            length(m.message_text)
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        INNER JOIN
+            users u
+            ON u.id = m.sender_user_id
+        WHERE
+            c.title = chat_title AND
+            m.content_type = 'messageText'
+    )
+SELECT
+    first_name,
+    last_name,
+    username,
+    AVG(text_length) av
+FROM
+   SELECTION
+GROUP BY
+    first_name, last_name, username
+ORDER BY av DESC;
+
+            c.title = chat_title AND
+
+
+-- selecting number of messages sent in a given hour of day
+SELECT
+    u.first_name,
+    u.last_name,
+    to_char(m.send_date, 'HH24') hod,
+    to_char(m.send_date, 'Day') dow,
+    m.id
+FROM
+    messages m
+INNER JOIN
+    users u
+    ON u.id = m.sender_user_id
+INNER JOIN
+    chats c
+    ON c.id = m.chat_id
+WHERE
+    c.title = 'Telegram';
