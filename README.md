@@ -26,14 +26,20 @@ export LDFLAGS="-L/usr/local/opt/openssl/lib" export CPPFLAGS="-I/usr/local/opt/
 8\. Run `pipenv install` to install dependencies and create a venv.
 
 ## Run
-With pipenv you have to switch to your virtualenv using: 
+
+1. Start the DB server, f.e. if `postgresdb` is the directory where you would like to keep it:
+DB can be empty schema will be initialized on the first run of the script.
+
+```sh
+pg_ctl -D postgresdb start
+```
+
+2. With pipenv you have to switch to your virtualenv using: 
 `pipenv shell`
 
-Then just `python extract_thistory.py`
+3. Then just `python extract_thistory.py`
 
-Enter your code to authenticate with Telegram.
-
-DB can be empty schema will be initialized on the first run of the script.
+4. Enter your code to authenticate with Telegram.
 
 ## Queries
 
