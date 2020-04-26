@@ -1,0 +1,735 @@
+---
+title: Telegram Chats History Analysis
+params:
+  date: !r Sys.Date()
+output:
+  pdf_document:
+    latex_engine: xelatex
+    dev: cairo_pdf
+  html_document: default
+mainfont: Helvetica
+sansfont: Helvetica
+mathfont: Consolas
+monofont: Consolas
+fontsize: 12pt
+---
+```{r, echo=F, message=F, warning=F}
+
+library(tidyverse)
+library(dplyr)
+library(odbc)
+library(stringi)
+library(kableExtra)
+library(config)
+
+config <- config::get()
+config$dbhost <- 'localhost'
+config$dbport <- 5432
+
+con <- DBI::dbConnect(odbc::odbc(),
+                        driver = "/usr/local/lib/psqlodbcw.so",
+                        database = config$dbname,
+                        user = config$dbuser,
+                        host = config$dbhost,
+                        port = config$dbport)
+```
+```{r useful_functions, echo=F, message=FALSE, warning=FALSE}
+#useful functions
+
+#useful function for ordering:
+days <- c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
+order_dow <- function(days_of_week) {
+  sapply(days_of_week, function(dow) { which(days == dow) }, USE.NAMES = F) 
+}
+rev_order_dow <- function(days_of_week) {
+  sapply(days_of_week, function(dow) { 8 - which(days == dow) }, USE.NAMES = F) 
+}
+
+#transliteration
+transliterate <- function(x) { 
+  x
+  #stri_trans_general(x, "russian-latin/bgn") # we used to need this before we used good fonts
+}
+```
+
+# Chats
+
+We have exported messages from several Telegram chats. How many messages are there in our DB from each chat?  (Limited to a certain pattern of the chat_title)
+```{r, echo=F, warning=F}
+q <- dbSendQuery(con, "
+                       WITH
+    SELECTION(chat_title, mid) AS (
+        SELECT
+            c.title,
+            m.id
+        FROM
+            messages m
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        WHERE
+            c.title LIKE ? 
+    ),
+    TOTAL(total_count) AS (SELECT COUNT(mid) FROM SELECTION)
+SELECT
+    chat_title,
+    COUNT(mid) message_count,
+    round(CAST(COUNT(mid) AS numeric) / total_count * 100, 2) prop
+FROM
+   TOTAL, SELECTION
+GROUP BY
+    (chat_title, total_count)
+ORDER BY
+    message_count DESC;")
+dbBind(q, config$chat_title_pattern)
+tbl <- dbFetch(q)
+tbl <- tbl %>% 
+  mutate(message_count = as.integer(message_count)) %>% 
+  mutate(chat_title = reorder(chat_title, message_count)) 
+
+```
+```{r echo=F, warning=F, fig.asp=0.2}
+
+tbl %>%
+  ggplot(aes(chat_title, message_count, fill=chat_title)) + 
+  geom_bar(stat="identity") +
+  guides(fill="none") +
+  scale_x_discrete(name="chat title") +
+  scale_y_continuous(name="message count") +
+  coord_flip() +
+  theme_light(base_family = "Helvetica")
+  
+sorted <- tbl %>% arrange(desc(message_count))
+first <- as.character(sorted$chat_title[1])
+second <- as.character(sorted$chat_title[2])
+second_msg_count <- sorted$message_count[2]
+```
+
+The obvious leader is `r first` chat. `r second` is in the second place having `r second_msg_count` messages. 
+
+# `r first`
+This is a chat of opinions, holywar and flame.  Let's find out who are the most opinionated users.  Who posted and how many messages in this chat?  Here and below we'll look mainly at the users who have posted 50 messages or more.  We'll look at message distributions over several parameters: users, day of week, hour of day, message content types and finally by text message length.
+
+```{r echo=F, warning=F, message=F}
+q <- con %>% DBI::dbSendQuery("
+WITH CHAT_TITLE(chat_title) AS (SELECT ?),
+    SELECTION(uid, username, first_name, last_name, mid) AS (
+        SELECT
+            u.id,
+            u.username,
+            u.first_name,
+            u.last_name,
+            m.id
+        FROM
+            CHAT_TITLE,
+            users u
+        INNER JOIN
+            messages m
+            ON u.id = m.sender_user_id
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        WHERE
+            c.title = chat_title
+    ),
+    TOTAL(total_count) AS (SELECT COUNT(mid) FROM SELECTION)
+SELECT
+    uid,
+    username,
+    first_name,
+    last_name,
+    COUNT(mid) message_count,
+    round(CAST(COUNT(mid) AS numeric) / total_count * 100, 2) prop
+FROM
+   TOTAL, SELECTION
+GROUP BY
+    (uid, username, first_name, last_name, total_count)
+ORDER BY
+    message_count DESC;
+")
+DBI::dbBind(q, first)
+tbl <- DBI::dbFetch(q)
+```
+```{r echo=F, warning=F}
+users <- tbl %>% 
+  mutate(message_count=as.numeric(message_count)) %>%
+  mutate(name=paste(first_name, last_name))  %>%
+  mutate(name = transliterate(name)) %>%
+  mutate(name = reorder(name, message_count)) 
+
+tbl <- users %>%
+  filter(message_count>50) 
+```
+```{r echo=F, message=F, warning=F, fig.asp = 0.6}
+
+tbl %>%
+  ggplot(aes(name, message_count)) +
+  coord_flip() +
+  geom_bar(aes(fill=name), stat="identity") +
+  guides(fill="none") + 
+  theme(axis.text.y = element_text(size=8), axis.text.x = element_text(size=8)) +
+  scale_y_continuous(name="message count", breaks = seq(0,2000,100)) + 
+  theme_light(base_family = "Helvetica")
+```
+
+## Day of Week
+
+What is the most popular day of week?
+```{r echo=F, warning=F, message=F}
+q <- con %>% dbSendQuery("
+WITH
+    CHAT_TITLE(chat_title) AS (SELECT ?),
+    SELECTION(day_of_week, mid) AS (
+        SELECT
+            to_char(m.send_date, 'Day'),
+            m.id
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        WHERE
+            c.title = chat_title
+    ),
+    TOTAL(total_count) AS (SELECT COUNT(mid) FROM SELECTION)
+SELECT
+    day_of_week,
+    COUNT(mid) message_count,
+    round(CAST(COUNT(mid) AS numeric) / total_count * 100, 2) prop
+FROM
+   TOTAL, SELECTION
+GROUP BY
+    (day_of_week, total_count)
+ORDER BY
+    message_count DESC;
+    ")
+dbBind(q, first)
+dbtbl <- dbFetch(q)
+```
+```{r echo=F, warning=F}
+tbl <- dbtbl %>% 
+  mutate(message_count=as.numeric(message_count)) %>% 
+  mutate(day_of_week = str_trim(day_of_week))
+
+order <- tbl$day_of_week %>% order_dow()
+rev_order <- tbl$day_of_week %>% rev_order_dow()
+
+tbl <- tbl %>% 
+  select(day_of_week, message_count) %>%
+  mutate(day_of_week = reorder(day_of_week, rev_order))
+
+```
+<div class = "row">
+<div class = "col-md-6">
+```{r echo=F, warning=F}
+tbl %>% 
+  kable(col.names=c("day of week", "message count"))  %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+</div>
+<div class = "col-md-6">
+```{r echo=F, message=F, warning=F}
+tbl %>%
+  ggplot() +
+  geom_bar(aes(day_of_week, message_count, fill = day_of_week), stat="identity") + coord_flip() + guides(fill = "none")
+```
+</div>
+</div>
+`r tbl$day_of_week[1]` and `r tbl$day_of_week[2]` seem to be the heaviest days.  
+
+```{r results="asis", echo=F}
+cat('\\pagebreak')
+```
+Let's see the distribution of messages by people and by day of week. 
+
+```{r echo=F, message=F, warning=F}
+q <- con %>% dbSendQuery("
+WITH
+    CHAT_TITLE(chat_title) AS (SELECT ?),
+    SELECTION(username, first_name, last_name, day_of_week, mid) AS (
+        SELECT
+            u.username,
+            u.first_name,
+            u.last_name,
+            to_char(m.send_date, 'Day'),
+            m.id
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            users u
+            ON u.id = m.sender_user_id
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        WHERE
+            c.title = chat_title
+    ),
+    TOTAL(total_count) AS (SELECT COUNT(mid) FROM SELECTION)
+SELECT
+    username,
+    first_name,
+    last_name,
+    day_of_week,
+    COUNT(mid) message_count,
+    round(CAST(COUNT(mid) AS numeric) / total_count * 100, 2) prop
+FROM
+   TOTAL, SELECTION
+GROUP BY
+    (username, first_name, last_name, day_of_week, total_count)
+ORDER BY
+    message_count DESC;")
+dbBind(q,first)
+tbl <- dbFetch(q)
+
+```
+```{r echo=F, message=F, warning=F}
+
+mutated <- tbl %>% 
+  mutate(day_of_week = str_trim(day_of_week)) %>%
+  mutate(message_count = as.numeric(message_count)) %>%
+  mutate(name = paste(first_name,last_name)) 
+
+joined <- left_join(mutated, users, by="name")
+  
+final <- joined %>% 
+  mutate(user_message_count = message_count.y) %>%
+  filter(user_message_count > 100) %>% 
+  mutate(message_count = message_count.x) %>% 
+  select(day_of_week, name, message_count, user_message_count) %>%
+  mutate(name = transliterate(name)) %>%
+  mutate(name = reorder(name, user_message_count))
+  
+
+#options(repr.plot.width = 14, repr.plot.height = 8)
+
+final %>%
+  ggplot() +
+  geom_point(aes(day_of_week, name, size=message_count, color=message_count)) +
+  scale_x_discrete(limits=days) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  guides(colour=guide_colourbar(title=""),
+         size=guide_legend(title="message count")) +
+  xlab("day of week") +
+  scale_colour_distiller(palette = "Spectral")
+```
+```{r results='asis', echo=F}
+cat('\\pagebreak')
+```
+
+## Hour of Day / Day of Week (HOD / DOW)
+
+```{r echo=F, message=F, warning=F}
+q <- con %>% dbSendQuery("
+SELECT
+    u.first_name,
+    u.last_name,
+    to_char(m.send_date, 'HH24') hod,
+    to_char(m.send_date, 'Day') dow,
+    m.id
+FROM
+    messages m
+INNER JOIN
+    users u
+    ON u.id = m.sender_user_id
+INNER JOIN
+    chats c
+    ON c.id = m.chat_id
+WHERE
+    c.title = ?;
+")
+dbBind(q, first)
+dbtbl <- dbFetch(q)
+```
+
+```{r echo=F, message=F, warning=F}
+tbl <- dbtbl %>%
+  mutate(name = paste(first_name,last_name)) %>% 
+  mutate(name =  transliterate(name)) %>%
+  select(name,dow,hod) %>% 
+  mutate(dow = str_trim(dow))
+
+order <- tbl$dow %>% order_dow()
+rev_order <- tbl$dow %>% rev_order_dow()
+
+tbl1 <- tbl %>%
+  group_by(dow, hod) %>%
+  summarize(count = n()) 
+
+tbl1 %>%
+  ggplot() +
+  geom_point(aes(hod, dow, size=count, colour=count)) +
+  scale_y_discrete(limits=rev(days)) +
+  scale_colour_distiller(palette = "Spectral") + 
+  guides(size = "none", colour = guide_colourbar(title="message count")) +
+  xlab("hour of day") + 
+  ylab("day of week")
+
+```
+
+From this chart a simple conclusion is that on Friday the "busy" hours are from 10 to 15, with a peak at 11.   
+On Monday we see some activity at 12 and on Tuesday at 14.  
+Wednesday has a more even spread of messages from 10-15, with a peak at 15. 
+
+```{r results="asis", echo=F}
+cat('\\pagebreak')
+```
+## Hour of Day
+Distribution of messages by hour and user on a given day.  
+
+### Friday
+```{r echo=F, message=F, warning=F}
+tbl2 <- tbl %>%
+  filter(dow=="Friday") %>%
+  group_by(hod, name) %>%
+  summarize(count = n())
+
+tbl3 <- left_join(users, tbl2) %>%
+  filter(message_count > 50) %>%
+  mutate(name=reorder(name, message_count))
+
+tbl3 %>% 
+  ggplot() +
+  geom_point(aes(hod, name, size=count, colour=count)) + 
+  scale_colour_distiller(palette="Spectral")
+  
+```
+
+### Wednesday
+```{r echo=F, message=F, warning=F}
+tbl2 <- tbl %>%
+  filter(dow=="Wednesday") %>%
+  group_by(hod, name) %>%
+  summarize(count = n())
+
+tbl3 <- left_join(users, tbl2) %>%
+  filter(message_count > 50) %>%
+  mutate(name=reorder(name, message_count))
+
+tbl3 %>% 
+  ggplot() +
+  geom_point(aes(hod, name, size=count, colour=count)) + 
+  scale_colour_distiller(palette="Spectral")
+```
+
+
+
+## Message Content Types
+```{r echo=F, message=F, warning=F}
+q <- con %>% dbSendQuery("
+WITH
+    CHAT_TITLE(chat_title) AS (SELECT ?),
+    SELECTION(content_type, mid) AS (
+        SELECT
+            m.content_type,
+            m.id
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        WHERE
+            c.title = chat_title
+    ),
+    TOTAL(total_count) AS (SELECT COUNT(mid) FROM SELECTION)
+SELECT
+    content_type,
+    COUNT(mid) message_count,
+    round(CAST(COUNT(mid) AS numeric) / total_count * 100, 2) prop
+FROM
+   TOTAL, SELECTION
+GROUP BY
+    (content_type, total_count)
+ORDER BY
+    message_count DESC;")
+dbBind(q, first)
+dbtbl <- dbFetch(q)
+```
+```{r echo=F, message=F, warning=F}
+dbtbl %>% 
+  kable() %>%
+  kable_styling()
+```
+
+The dominating content type is of course text message.   
+
+Let's see what is the distribution of message count by message types and users.  We arrange user list by descending text message count. 
+
+```{r echo=F, message=F, warning=F}
+q <- con %>% dbSendQuery("WITH CHAT_TITLE(chat_title) AS (SELECT ?),
+    SELECTION(username, first_name, last_name, content_type, mid) AS (
+        SELECT
+            u.username,
+            u.first_name,
+            u.last_name,
+            m.content_type,
+            m.id
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            users u
+            ON u.id = m.sender_user_id
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        WHERE
+            c.title = chat_title
+    ),
+    TOTAL(total_count) AS (SELECT COUNT(mid) FROM SELECTION)
+SELECT
+    username,
+    first_name,
+    last_name,
+    content_type,
+    COUNT(mid) message_count,
+    round(CAST(COUNT(mid) AS numeric) / total_count * 100, 2) prop
+FROM
+   TOTAL, SELECTION
+GROUP BY
+    (username, first_name, last_name, content_type, total_count)
+ORDER BY
+    message_count DESC;")
+dbBind(q,first)
+dbtbl <- dbFetch(q)
+```
+```{r echo = F, message=F, warning=F}
+tbl1 <- dbtbl %>% 
+  mutate(name = paste(first_name, last_name)) %>%
+  mutate(name = transliterate(name)) %>%
+  mutate(message_count = as.integer(message_count)) %>%
+  select(name, content_type, message_count)
+
+tbl2 <- left_join(tbl1, users, by="name") %>% 
+  mutate(message_count = message_count.x) %>%
+  mutate(user_message_count = message_count.y) %>%
+  select(name, content_type, message_count, user_message_count) %>%
+  mutate(name = reorder(name, user_message_count)) %>%
+  filter(user_message_count > 50)
+```
+```{r echo=F, message=F, fig.asp = 1.2} 
+tbl2 %>%
+  ggplot() +
+  geom_point(aes(content_type, name, colour=message_count, size=message_count)) +
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) + 
+  guides(fill = "none", size = "none") +#guide_legend(title="message count")) + 
+  xlab("content type") + 
+  scale_colour_distiller(palette = "Spectral")
+```
+
+We can also explore `messagePhoto` content type in a bit more depth, f.e. let's see who posted how many photo messages arranging from the user with most photo messages:
+
+```{r echo=F, message=F, warning=F}
+tbl3 <- tbl2 %>% 
+  filter(content_type=='messagePhoto') %>% 
+  mutate(name = reorder(name, message_count)) 
+
+tbl3 %>% 
+  ggplot() +
+  geom_bar(aes(name, message_count, fill = name), stat="identity") +
+  coord_flip() +
+  guides(fill = "none")
+```
+
+`messageSticker` content type has yet another distribution:
+
+```{r echo=F, message=F, fig.asp = 0.5}
+tbl4 <- tbl2 %>% 
+  filter(content_type=='messageSticker') %>% 
+  mutate(name = reorder(name, message_count)) 
+
+tbl4 %>% 
+  ggplot() +
+  geom_bar(aes(name, message_count, fill = name), stat="identity") +
+  coord_flip() +
+  guides(fill = "none")
+```
+
+Overall as you see sticker is not the most popular content type.
+
+## Text Message Lengths
+
+Let's see the distribution of message length by person. Again filtering only those who had at least 50 messages.  We use a boxplot here to show the 25th and 75th percentile, and the spread min max as the edges of the line.  The dot represents the mean, the vertical line - the median.  We use color to represent the message count sent by a certain user as another dimension of comparison.
+
+```{r echo=F, message=F, warning=F}
+
+q <- con %>% DBI::dbSendQuery("
+WITH
+    CHAT_TITLE(chat_title) AS (SELECT ?),
+    SELECTION(first_name, last_name, username, text_length) AS (
+        SELECT
+            u.first_name,
+            u.last_name,
+            u.username,
+            length(m.message_text)
+        FROM
+            CHAT_TITLE,
+            messages m
+        INNER JOIN
+            chats c
+            ON c.id = m.chat_id
+        INNER JOIN
+            users u
+            ON u.id = m.sender_user_id
+        WHERE
+            c.title = chat_title AND
+            m.content_type = 'messageText'
+    )
+SELECT
+    first_name,
+    last_name,
+    username,
+    text_length
+FROM
+   SELECTION;")
+
+dbBind(q,first)
+dbtbl <- dbFetch(q)
+```
+```{r echo=F, message=F, warning=F}
+tbl <- dbtbl %>%
+  mutate(name = paste(first_name, last_name)) %>% 
+  mutate(name = transliterate(name))
+
+tbl2 <- left_join(tbl, users, by="name")
+
+tbl3 <- tbl2 %>% 
+  filter(message_count > 50) %>%
+  group_by(name) %>%
+  mutate(mean = mean(text_length)) %>%
+  ungroup() %>%
+  mutate(name = reorder(name, mean)) %>%
+  select(name, text_length, mean, message_count)
+
+tbl3 %>%
+  ggplot() + 
+  geom_boxplot(aes(name, text_length, fill = message_count), outlier.shape=NA) + 
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5)) +
+  scale_y_discrete(limits=seq(0,300,50)) + 
+  ylab("message text length") +
+  geom_point(aes(name, mean)) +
+  coord_flip() +
+  scale_fill_distiller(palette = "Spectral")
+```
+
+The conclusion to draw here - is that the majority of messages length is well under 100 character, with median below 50 characters. Some users are more verbose, but verbosity does not correlate much with the frequency or total number of messages sent.  People who send a lot of messages don't seem to be very verbose.
+
+```{r results="asis", echo=F}
+cat('\\pagebreak')
+```
+
+# `r second`
+
+This is another chat.  Message count distribution by users:
+
+```{r echo=F, message=F, warning=F}
+q <- con %>% DBI::dbSendQuery("
+SELECT
+    u.first_name,
+    u.last_name,
+    m.id
+FROM
+    users u
+INNER JOIN
+    messages m
+    ON u.id = m.sender_user_id
+INNER JOIN
+    chats c
+    ON c.id = m.chat_id
+WHERE
+    c.title = ?
+")
+dbBind(q,second)
+dbtbl <- dbFetch(q)
+
+```
+```{r echo=F, message=F, warning=F}
+tbl <- dbtbl %>%
+  mutate(name = paste(first_name, last_name)) %>%
+  mutate(name = transliterate(name)) %>% 
+  select(name, id) %>%
+  group_by(name) %>%
+  summarize(count = n()) %>%
+  filter(count > 50) %>%
+  arrange(count)
+
+tbl %>%
+  ggplot() +
+  geom_bar(aes(name, count, fill = name), stat="identity") + 
+  guides(fill="none") +
+  scale_x_discrete(limits = tbl$name) + 
+  coord_flip()
+```
+
+## Day of Week and Hour of Day Analysis
+
+```{r echo=F, message=F, warning=F}
+q <- con %>% DBI::dbSendQuery("
+SELECT
+    u.first_name,
+    u.last_name,
+    to_char(m.send_date, 'HH24') hod,
+    to_char(m.send_date, 'Day') dow,
+    m.id
+FROM
+    messages m
+INNER JOIN
+    users u
+    ON u.id = m.sender_user_id
+INNER JOIN
+    chats c
+    ON c.id = m.chat_id
+WHERE
+    c.title = ?;
+")
+dbBind(q,second)
+dbtbl <- dbFetch(q)
+```
+
+```{r echo=F, warning=F, message=F}
+tbl <- dbtbl %>%
+  mutate(name = paste(first_name,last_name)) %>% 
+  mutate(name =  transliterate(name)) %>%
+  select(name,dow,hod) %>% 
+  mutate(dow = str_trim(dow))
+
+order <- tbl$dow %>% order_dow()
+rev_order <- tbl$dow %>% rev_order_dow()
+
+tbl1 <- tbl %>%
+  group_by(dow, hod) %>%
+  summarize(count = n()) 
+```
+
+```{r echo=F,warning=F, message=F}
+tbl2 <- tbl %>% 
+  group_by(dow) %>%
+  summarize(count = n()) 
+
+tbl2 %>%
+  ggplot() +
+  geom_bar(aes(dow,count,fill=dow), stat="identity") + 
+  scale_x_discrete(limits=rev(days)) +
+  guides(fill = "none") +
+  xlab("day of week") + 
+  ylab("count") + 
+  coord_flip()
+```
+
+Monday, Thursday and Friday are the heaviest.  
+
+```{r echo=F, warning=F, message=F}
+tbl1 %>%
+  ggplot() +
+  geom_point(aes(hod, dow, size=count, colour=count)) +
+  scale_y_discrete(limits=rev(days)) +
+  scale_colour_distiller(palette = "Spectral") + 
+  guides(size = "none", colour = guide_colourbar(title="message count")) +
+  xlab("hour of day") + 
+  ylab("day of week")
+
+```
+
+Sparks of activity on Thursday at 11 and Monday after 15 o'clock.  On Friday debates start after 10 and spread evenly until 16 hours. 
