@@ -1,0 +1,17 @@
+# replace values with your own and copy to config.yml:
+# default top key is needed for R analysis config
+default:
+  chats:
+    - "Telegram"
+    - "other chat"
+    - "etc"
+
+  chat_title_pattern: '%'
+
+  dbname: tghistory
+  dbuser: tgclient
+
+  user_phone: '+311234333223'
+  app_id: '1234552'
+  api_hash: '61ecbc41cdae3e6b32712a06c73606fa'
+
