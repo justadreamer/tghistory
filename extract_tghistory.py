@@ -19,8 +19,13 @@ tg = Telegram(
 )
 
 pp = pprint.PrettyPrinter(indent=2)
-
-db = DB("dbname={} user={}".format(config['dbname'], config['dbuser']))
+connection_string = "dbname={} user={} password={} host={} port={}".format(config['dbname'],
+                                                               config['dbuser'],
+                                                               config['dbpassword'],
+                                                               config['dbhost'],
+                                                               config['dbport'])
+print(connection_string)
+db = DB(connection_string=connection_string)
 
 # end global service objects definitions
 

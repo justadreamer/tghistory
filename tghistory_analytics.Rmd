@@ -23,13 +23,12 @@ library(kableExtra)
 library(config)
 
 config <- config::get()
-config$dbhost <- 'localhost'
-config$dbport <- 5432
-
+config 
 con <- DBI::dbConnect(odbc::odbc(),
                         driver = "/usr/local/lib/psqlodbcw.so",
                         database = config$dbname,
                         user = config$dbuser,
+                        password=ifelse(is.null(config$dbpassword), '', config$dbpassword),
                         host = config$dbhost,
                         port = config$dbport)
 ```

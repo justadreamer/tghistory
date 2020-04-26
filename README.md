@@ -8,13 +8,13 @@ Accompanying blog article: http://logic-explained.blogspot.com/2020/03/telegram-
 1\. Register a Telegram app at [my.telegram.org/apps](https://my.telegram.org/apps), obtain `API_ID`, `API_HASH`  
 2\. Build and install [TDLib](https://github.com/tdlib/td#building)  
 3\. Setup a Postgres DB in an arbitrary location.    
-4\. Create `config.py` 
+4\. Create `config.yml` 
 ```sh
-cp config_example.py config.py
+cp example.config.yml config.yml
 ```
-5\. Set values in the `config.py`:
- - your DB connection string in the form suitable for psycopg initalization: `dbname={DBNAME} user={user} password={password} host={host}`
- - API_ID, API_HASH
+5\. Set values in the `config.yml` (this file is used in both Python and R):
+ - DB connection parameters 
+ - app_id, api_hash obtained from Telegram (see step 1)
  - your phone number to connect to your Telegram account
  - list of chat titles for which you would like to fetch history 
 
@@ -43,4 +43,14 @@ pg_ctl -D postgresdb start
 
 ## Queries
 
-`queries.sql` contains sample queries and comments.   
+`queries.sql` contains sample queries and comments.
+
+## R analysis
+
+You have to install R and then you can compile the analysis in R markdown: 
+
+```sh
+R -e "rmarkdown::render('tghistory_analytics.Rmd')"
+```  
+
+The output is available in `tghistory_analytics.pdf`
