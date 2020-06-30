@@ -135,14 +135,13 @@ filtered_users <- users %>%
   filter(message_count > 100)
 
 filtered_users %>%
-  
   ggplot(aes(name, message_count)) +
   coord_flip() +
   geom_bar(aes(fill=name), stat="identity") +
   guides(fill="none") + 
   theme(axis.text.y = element_text(size=8), axis.text.x = element_text(size=8)) +
   scale_x_discrete(limits=rev(filtered_users$name)) +
-  scale_y_continuous(name="message count", breaks = seq(0,2000,100)) + 
+  scale_y_continuous(name="message count") + 
   theme_light(base_family = "Helvetica")
 ```
 
@@ -365,65 +364,119 @@ The conclusion to draw here - is that the majority of messages length is well un
 cat('\\pagebreak')
 ```
 
-# `r second`
+## Conversations
 
-This is another chat.  Message count distribution by users:
+Let's study the structure of conversations.  We consider a single day in a chat to be a single conversation.  We consider all messages before 6am to belong to the previous day - thus let's subtract  6 hours from `send_date` before taking a `date` component from it.  
+
+Here is the distribution of conversations by the number of messages within a conversation:
+
 ```{r echo=F, message=F, warning=F}
-result <- fetch_messages_from(second)
-messages_second <- result[[1]]
-users_second <- result[[2]]
+convos <- messages %>%
+  mutate(send_date = send_date - hours(6)) %>%
+  mutate(date = date(send_date)) %>%
+  group_by(date) %>%
+  summarize(n_messages = n()) %>%
+  arrange(desc(n_messages)) 
+
+convos_by_days <- convos %>%
+  group_by(n_messages) %>%
+  summarize(n_convos = n()) %>%
+  arrange(desc(n_convos))
+
+total_convos = nrow(convos)
+median_convo_length = quantile(convos$n_messages, 0.5)
+mean_convo_length = mean(convos$n_messages)
 ```
 ```{r echo=F, message=F, warning=F}
-tbl <- messages_second %>%
-  select(name) %>%
-  group_by(name) %>%
-  summarize(count = n()) %>%
-  filter(count > 50) %>%
-  arrange(count)
-
-tbl %>%
-  ggplot() +
-  geom_bar(aes(name, count, fill = name), stat="identity") + 
-  guides(fill="none") +
-  scale_x_discrete(limits = tbl$name) + 
-  coord_flip()
+convos_by_days %>% 
+  filter(n_messages < 105) %>%
+  ggplot() + 
+  geom_bar(aes(n_messages, n_convos, fill=n_messages), stat="identity") + 
+  geom_vline(xintercept=median_convo_length, color="red") +
+  geom_vline(xintercept=mean_convo_length, color="green")
 ```
 
-## Day of Week and Hour of Day Analysis
-```{r echo=F, warning=F, message=F}
-dow_hod <- messages_second %>%
-  rename(dow=day_of_week, hod = hour_of_day) 
+Median is red and mean is green.  In total there are `r total_convos` convos in this chat. 
+
+### Conversation starters and supporters
+There are users who send the first message on a given day.  As the first message we understand a message sent after 6am, all others can be considered to be sent on a previous day.  Thus we want to see the distribution of the first message occurrences by users.  We also want to see who is supporting the discussion - the distribution of the second message occurrences by users. 
+
+```{r echo=F, message=F, warning=F}
+starters <- messages %>% 
+  mutate(date =  date(send_date)) %>%
+  mutate(hour = hour(send_date)) %>%
+  filter(hour > 6) %>%
+  group_by(date) %>% 
+  arrange(desc(date), send_date) 
+
+pairs <- starters %>%
+  summarize(first = first(name), second = nth(name, 2))  %>%
+  arrange(desc(date))
+
+couples <- pairs %>%
+  filter(!is.na(second)) %>%
+  group_by(first, second) %>%
+  count() %>%
+  arrange(-n)
+
+couples %>% kable()
 ```
 
-```{r echo=F,warning=F, message=F}
-tbl1 <- dow_hod %>%
-  group_by(dow) %>%
-  summarize(count = n())
+We see that a lot of first and second message authors are the same, this is because sometimes a user splits her messages in several, let's collapse and view a sequence of messages from a single author as a single message.  Here is the distribution of conversations by starters and supporters (first and second message author):
 
-tbl1 %>%
-  ggplot() +
-  geom_bar(aes(dow,count,fill=dow), stat="identity") + 
-  scale_x_discrete(limits=rev(tbl1$dow)) +
-  guides(fill = "none") +
-  xlab("day of week") + 
-  ylab("count") + 
-  coord_flip()
+```{r echo=F, message=F, warning=F}
+filtered_starters <- starters %>%
+  filter(row_number() == 1 | name != first(name))
+
+collapsed <- filtered_starters %>%
+  summarize(first = first(name), second = nth(name, 2))  %>%
+  arrange(desc(date))
+
+collapsed_couples <- collapsed %>% group_by(first, second) %>%
+  filter (!is.na(second)) %>%
+  count() %>%
+  arrange(-n)
+
+collapsed_couples %>% kable()
 ```
 
-Monday, Thursday and Friday are the heaviest.  
 
-```{r echo=F, warning=F, message=F}
-dow_hod %>% 
-  group_by(dow, hod) %>%
-  summarize(count = n()) %>%
-  ggplot() +
-  geom_point(aes(hod, dow, size=count, colour=count)) +
-  scale_y_discrete(limits=rev(tbl1$dow)) +
-  scale_colour_distiller(palette = "Spectral") + 
-  guides(size = "none", colour = guide_colourbar(title="message count")) +
-  xlab("hour of day") + 
-  ylab("day of week")
+Also the distribution of conversations by first author:
+
+```{r echo=F, message=F, warning=F}
+
+first_author <- pairs %>% 
+  group_by(first) %>%
+  count() %>%
+  arrange(-n)
+
+first_author %>% kable()
 
 ```
 
-Sparks of activity on Thursday at 11 and Monday after 15 o'clock.  On Friday debates start after 10 and spread evenly until 16 hours. 
+Distribution of conversation by second author:
+```{r echo=F, message=F, warning=F}
+
+second_author <- collapsed %>% 
+  group_by(second) %>%
+  count() %>%
+  arrange(-n)
+
+second_author %>% kable()
+```
+
+We also see that some conversations do not have a second author, let's see how many conversations have just a single author and their distribution, and also a % of conversations of a given author where he didn't get any response:
+
+```{r echo=F, message=F, warning=F}
+singlers <- collapsed %>%
+  filter(is.na(second)) %>%
+  group_by(first) %>% 
+  count() %>%
+  left_join(first_author, by="first")  %>%
+  rename(n_single = n.x, n_total=n.y) %>%
+  mutate(percent = round(n_single/n_total*100,2)) %>%
+  arrange(-n_total) 
+
+singlers %>% kable()
+```
+
