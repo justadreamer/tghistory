@@ -34,9 +34,37 @@ con <- DBI::dbConnect(odbc::odbc(),
 ```
 ```{r useful_functions, echo=F, message=FALSE, warning=FALSE}
 #name processing
-process_name <- function(name) { 
-  name
-  #stri_trans_general(name, "russian-latin/bgn") # we used to need this before we used good fonts
+
+animals <- read.table("animals.txt", as.is = T, col.names = c("animal")) %>% 
+  mutate(original = rep(NA, length(animal)))
+
+namemap <- data.frame(original = c(""), anonymized = c(""), stringsAsFactors = F)
+
+anonymize1 <- function(name, suffix="Anonymous") {
+  anonymized <- (namemap %>% filter(original == name) %>% .$anonymized)[1]
+  if (is.na(anonymized)) {
+    a <- sample(animals[,1], 1)
+    if (length(animals[is.na(animals$original),1]) > 0) {
+      a <- sample(animals[is.na(animals$original), 1], 1)
+    }
+    anonymized <- paste(str_to_title(a), suffix)
+    namemap <<- namemap %>% add_row(original = name, anonymized = anonymized)
+    animals[animals$animal==a, 2] <<- name
+  }
+  anonymized
+}
+
+anonymize <- function(names) {
+  map_chr(names, function(name) { anonymize1(name) })
+}
+
+anonymize_chat <- function(names) {
+  map_chr(names, function(name) { anonymize1(name, suffix="Chat") })
+}
+
+deanonymize <- function(anonymized_name) {
+  # remove suffix and lowercase
+  namemap[namemap$anonymized == anonymized_name, 1]
 }
 ```
 
@@ -58,7 +86,7 @@ q <- dbSendQuery(con, "
 dbBind(q, config$chat_title_pattern)
 dbtbl <- dbFetch(q)
 tbl <- dbtbl %>%
-  mutate(chat_title = title) %>%
+  mutate(chat_title = anonymize_chat(title)) %>%
   group_by(chat_title) %>%
   summarize(message_count = n()) %>%
   select(chat_title, message_count) %>%
@@ -111,7 +139,7 @@ fetch_messages_from <- function(chat) {
   dbmessages <- DBI::dbFetch(q_messages)
   messages <- dbmessages %>% 
     mutate(name = paste(first_name, last_name))  %>%
-    mutate(name = process_name(name)) %>%
+    mutate(name = anonymize(name)) %>%
     mutate(day_of_week = wday(send_date, week_start = 1, label=T, abbr=F)) %>%
     mutate(hour_of_day = hour(send_date)) %>%
     select(-first_name, -last_name) 
@@ -122,11 +150,11 @@ fetch_messages_from <- function(chat) {
     mutate(name = reorder(name, message_count)) %>%
     mutate(name = as.character(name))
   
-  list(messages, users)  
+  list(messages, users, dbmessages)  
 }
 ```
 ```{r echo=F, warning=F, message=F}
-result <- fetch_messages_from(first)
+result <- fetch_messages_from(deanonymize(first))
 messages <- result[[1]]
 users <- result[[2]]
 ```
