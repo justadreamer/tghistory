@@ -10,7 +10,7 @@ Accompanying blog article: http://logic-explained.blogspot.com/2020/03/telegram-
 3\. Setup a Postgres DB in an arbitrary location.    
 4\. Create `config.yml` 
 ```sh
-cp example.config.yml config.yml
+cp config.yml.example config.yml
 ```
 5\. Set values in the `config.yml` (this file is used in both Python and R):
  - DB connection parameters 
@@ -25,21 +25,37 @@ export LDFLAGS="-L/usr/local/opt/openssl/lib" export CPPFLAGS="-I/usr/local/opt/
 ```
 8\. Run `pipenv install` to install dependencies and create a venv.
 
+9\. Install R
+
+10\. Launch R and install packages by issuing the command:
+```R
+install.packages(c("tidyverse", "lubridate", "odbc", "kableExtra", "config"))
+```
+you will be prompted to selecte a CRAN mirror - the first one will do. 
+
 ## Run
 
-1. Start the DB server, f.e. if `postgresdb` is the directory where you would like to keep it:
+Script which automates the following steps is `./run-analytics.sh`.
+
+1\. Start the DB server, f.e. if `postgresdb` is the directory where you would like to keep it:
 DB can be empty schema will be initialized on the first run of the script.
 
 ```sh
 pg_ctl -D postgresdb start
 ```
 
-2. With pipenv you have to switch to your virtualenv using: 
+2\. With pipenv you have to switch to your virtualenv using: 
 `pipenv shell`
 
-3. Then just `python extract_thistory.py`
+3\. Then just `python extract_thistory.py`
 
-4. Enter your code to authenticate with Telegram.
+4\. Enter your code to authenticate with Telegram.
+
+5\. Then run R analysis using:
+
+```sh
+R -e "rmarkdown::render('tghistory_analytics.Rmd')"
+```
 
 ## Queries
 
