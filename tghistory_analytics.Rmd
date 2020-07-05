@@ -31,6 +31,8 @@ con <- DBI::dbConnect(odbc::odbc(),
                         password=ifelse(is.null(config$dbpassword), '', config$dbpassword),
                         host = config$dbhost,
                         port = config$dbport)
+should_anonymize <- ifelse(!is.null(config$anonymize), config$anonymize, T) # by default pseudonymize
+
 ```
 ```{r useful_functions, echo=F, message=FALSE, warning=FALSE}
 #name processing
@@ -41,6 +43,9 @@ animals <- read.table("animals.txt", as.is = T, col.names = c("animal")) %>%
 namemap <- data.frame(original = c(""), anonymized = c(""), stringsAsFactors = F)
 
 anonymize1 <- function(name, suffix="Anonymous") {
+  if (!should_anonymize) {
+    return(name)
+  }
   anonymized <- (namemap %>% filter(original == name) %>% .$anonymized)[1]
   if (is.na(anonymized)) {
     a <- sample(animals[,1], 1)
@@ -63,6 +68,9 @@ anonymize_chat <- function(names) {
 }
 
 deanonymize <- function(anonymized_name) {
+  if (!should_anonymize) { 
+    return(anonymized_name)
+  }
   # remove suffix and lowercase
   namemap[namemap$anonymized == anonymized_name, 1]
 }

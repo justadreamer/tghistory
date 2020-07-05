@@ -10,8 +10,12 @@ default:
 
   dbname: tghistory
   dbuser: tgclient
+  dbpassword: ''
+  dbhost: localhost
+  dbport: 5432
 
   user_phone: '+311234333223'
   app_id: '1234552'
   api_hash: '61ecbc41cdae3e6b32712a06c73606fa'
 
+  anonymize: true
