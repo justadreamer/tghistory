@@ -17,9 +17,7 @@ fontsize: 12pt
 
 library(tidyverse)
 library(lubridate)
-library(dplyr)
 library(odbc)
-library(stringi)
 library(kableExtra)
 library(config)
 
