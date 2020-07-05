@@ -1,7 +1,10 @@
 # tghistory
 
-Import Telegram message history into a PostgreSQL DB
-Accompanying blog article: http://logic-explained.blogspot.com/2020/03/telegram-chats-history-analysis.html
+Import Telegram message history into a PostgreSQL DB and run an R analysis producing a report using knitr from an R Markdown document.
+
+Accompanying blog articles: 
+1. http://logic-explained.blogspot.com/2020/03/telegram-chats-history-analysis.html
+2. https://logic-explained.blogspot.com/2020/07/telegram-chats-history-analysis-with-r.html
 
 ## Setup 
 
