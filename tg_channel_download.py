@@ -16,10 +16,11 @@ from telethon.tl.types import WebPage
 from datetime import datetime
 from datetime import timezone
 from datetime import timedelta
+from yaml import Loader
 
 #load config:
 with open('config.yml','r') as f:
-    config = yaml.load(f)['default']
+    config = yaml.load(f, Loader)['default']
     print(config)
 
 # global service objects:
