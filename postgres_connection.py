@@ -29,24 +29,24 @@ class DB:
 
     def store_message(self, message):
         text = ""
-        if 'text' in message['content'] and 'text' in message['content']['text']:
-            text = message['content']['text']['text']
-        send_date = datetime.datetime.fromtimestamp(message['date'])
-        content_type = message['content']['@type']
+        if 'text' in message['content']:
+            text = message['content']['text']
+            if text is not None:
+                # multiline text potentially:
+                text = text.replace('\n', '\\n')
+                text = text.replace('\\', '\\\\')
 
-        #multiline text potentially:
-        text = text.replace('\n', '\\n')
-        text = text.replace('\\', '\\\\')
+        content_type = message['content']['@type']
         #print('inserting:', message['id'], send_date, message['chat_id'], message['sender_user_id'], content_type, text)
 
         with self.connection:
             with self.connection.cursor() as cur:
                 cur.execute(
                     """insert into messages 
-                    (id, send_date, chat_id, sender_user_id, content_type, message_text) 
-                    values (%s, %s, %s, %s, %s, E%s)
+                    (id, send_date, chat_id, sender_user_id, content_type, message_text, metadata) 
+                    values (%s, %s, %s, %s, %s, %s, %s)
                     on conflict(id) do nothing""",
-                    (message['id'], send_date, message['chat_id'], message['sender_user_id'], content_type, text))
+                    (message['id'], message['date'], message['chat_id'], message['sender_user_id'], content_type, text, message['metadata']))
 
     def store_messages(self, messages):
         for message in messages:
@@ -74,3 +74,10 @@ class DB:
             if max_id is None:
                 max_id = 0
             return max_id
+
+    def get_last_stored_message_date(self, chat_id):
+        with self.connection.cursor() as cur:
+            cur.execute("select max(send_date) date from messages where chat_id = "+ str(chat_id))
+            record = cur.fetchone()
+            max_date = record[0]
+            return max_date

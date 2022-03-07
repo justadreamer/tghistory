@@ -8,7 +8,8 @@ create table if not exists messages (
     chat_id bigint not null,
     sender_user_id bigint not null,
     content_type varchar(255),
-    message_text text -- if content_type is messageText,
+    message_text text, -- if content_type is messageText,
+    metadata varchar(255)
 );
 
 create table if not exists chats (
