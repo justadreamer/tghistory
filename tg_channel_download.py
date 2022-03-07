@@ -12,7 +12,7 @@ from telethon.tl.types import DocumentAttributeFilename
 from telethon.tl.types import DocumentAttributeVideo
 from telethon.tl.types import WebPage
 
-
+import os
 from datetime import datetime
 from datetime import timezone
 from datetime import timedelta
@@ -24,18 +24,17 @@ with open('config.yml','r') as f:
     print(config)
 
 # global service objects:
-
-client = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
-client.start()
-
-pp = pprint.PrettyPrinter(indent=2)
 connection_string = "dbname={} user={} password={} host={} port={}".format(config['dbname'],
                                                                config['dbuser'],
                                                                config['dbpassword'],
                                                                config['dbhost'],
                                                                config['dbport'])
-print(connection_string)
 db = DB(connection_string=connection_string)
+
+client = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
+client.start()
+
+pp = pprint.PrettyPrinter(indent=2)
 
 async def download_history_batch(channel, offset_id):
     history = await client(GetHistoryRequest(
@@ -54,7 +53,6 @@ async def download_history_batch(channel, offset_id):
     messages = history.messages
 
     for message in messages:
-        print(message)
         message_dict = dict()
         offset_id = message.id
         date = message.date
@@ -75,8 +73,6 @@ async def download_history_batch(channel, offset_id):
                 elif isinstance(attribute, DocumentAttributeVideo):
                     filename = f"{message.id}.mp4"
                     content_type = 'video'
-
-            print(filename)
         elif isinstance(media, MessageMediaPhoto):
             filename = f"{message.id}.jpeg"
             content_type = 'photo'
@@ -89,7 +85,9 @@ async def download_history_batch(channel, offset_id):
         # download media
         metadata = None
         if filename is not None:
-            await client.download_media(message, f'download/{filename}')
+            filepath = f'download/{channel.id}/{filename}'
+            if not os.path.exists(filepath):
+                await client.download_media(message, filepath)
             metadata = filename
         elif url is not None:
             metadata = url
@@ -112,17 +110,21 @@ async def main(chat_name):
     dialogs = await client.get_dialogs()
     dialog = list(filter(lambda dialog: dialog.name == chat_name, dialogs))[0]
     channel = dialog.entity
-    print(channel)
     db.store_chat( { 'id':channel.id, 'title':channel.title } )
-    first_date = db.get_last_stored_message_date(channel.id)
-    if first_date is None:
-        first_date = datetime.fromisoformat("2022-02-24 00:00:00").replace(tzinfo=timezone(offset=timedelta()))
+
+    if config['redownload']:
+        lower_bound_date = None
+    else:
+        lower_bound_date = db.get_last_stored_message_date(channel.id)
+
+    if lower_bound_date is None:
+        lower_bound_date = datetime.fromisoformat("2022-02-24 00:00:00").replace(tzinfo=timezone(offset=timedelta()))
+
     date = datetime.now().replace(tzinfo=timezone(offset=timedelta()))
     offset_id = 0
-    while date > first_date:
+    while date > lower_bound_date:
         date, offset_id = await download_history_batch(channel, offset_id)
         print(date, offset_id)
-
 
 loop = asyncio.get_event_loop()
 loop.run_until_complete(main(config['chats'][0]))
