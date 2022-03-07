@@ -53,7 +53,7 @@ async def download_history_batch(channel, offset_id):
     messages = history.messages
 
     for message in messages:
-        pp.pprint(message)
+        print(message)
         message_dict = dict()
         offset_id = message.id
         date = message.date
@@ -88,7 +88,10 @@ async def download_history_batch(channel, offset_id):
         if filename is not None:
             filepath = f'download/{channel.id}/{filename}'
             if not os.path.exists(filepath):
+                print(f"downloading {filepath}")
                 await client.download_media(message, filepath)
+            else:
+                print(f"{filepath} already downloaded")
             metadata = filename
         elif url is not None:
             metadata = url
