@@ -53,6 +53,7 @@ async def download_history_batch(channel, offset_id):
     messages = history.messages
 
     for message in messages:
+        pp.pprint(message)
         message_dict = dict()
         offset_id = message.id
         date = message.date

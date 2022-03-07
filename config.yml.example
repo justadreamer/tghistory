@@ -19,3 +19,4 @@ default:
   api_hash: '61ecbc41cdae3e6b32712a06c73606fa'
 
   anonymize: true
+  redownload: true
