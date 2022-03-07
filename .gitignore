@@ -9,3 +9,4 @@ Telegram\ App\ Details.txt
 tghistory_analytics.log
 .R*
 config-*.yml
+.Rproj.user
