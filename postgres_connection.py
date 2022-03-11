@@ -31,10 +31,6 @@ class DB:
         text = ""
         if 'text' in message['content']:
             text = message['content']['text']
-            if text is not None:
-                # multiline text potentially:
-                text = text.replace('\n', '\\n')
-                text = text.replace('\\', '\\\\')
 
         content_type = message['content']['@type']
         #print('inserting:', message['id'], send_date, message['chat_id'], message['sender_user_id'], content_type, text)
@@ -81,3 +77,15 @@ class DB:
             record = cur.fetchone()
             max_date = record[0]
             return max_date
+
+    def get_messages(self, chat_id):
+        with self.connection.cursor() as cur:
+            cur.execute("select * from messages where chat_id = "+str(chat_id))
+            records = cur.fetchall()
+            return records
+
+    def update_message_upload(self, message_id, uploaded):
+        with self.connection:
+            with self.connection.cursor() as cur:
+                print(f'updating message id={message_id} with uploaded={uploaded}')
+                cur.execute('update messages set uploaded=%s where id=%s', (uploaded, message_id))
