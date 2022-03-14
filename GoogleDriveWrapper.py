@@ -1,6 +1,6 @@
-from pydrive.auth import GoogleAuth
-from pydrive.auth import RefreshError
-from pydrive.drive import GoogleDrive
+from pydrive2.auth import GoogleAuth
+from pydrive2.auth import RefreshError
+from pydrive2.drive import GoogleDrive
 import os
 from pathlib import PurePath
 
@@ -34,7 +34,7 @@ class Drive:
             print("title:", file['title'], "id:", file['id'])
 
 class File:
-    def __init__(self, file):
+    def __init__(self,file):
         self.file = file
 
     @property
@@ -48,10 +48,6 @@ class File:
     @property
     def id(self):
         return self.file['id']
-
-    @property
-    def isDirectory(self):
-        return self.file['mimeType'] == 'application/vnd.google-apps.folder'
 
     def delete(self):
         self.file.Delete()
@@ -89,21 +85,20 @@ class Folder:
         fileList = self.driveWrapper.fileListFrom(self.folder['id'])
         return fileList
 
-    def downloadAll(self,path): #non-recursive
+    def downloadAll(self,path):
         for f in self.files:
-            wrapped = File(f)
-            filePath = os.path.join(path,wrapped.title)
-            needsDownload = not wrapped.isDirectory
+            filePath = os.path.join(path,f['title'])
 
-            if needsDownload and os.path.exists(filePath):
-                upSize = wrapped.fileSize
+            needsDownload = True
+            if os.path.exists(filePath):
+                upSize = int(f['fileSize'])
                 downSize = os.stat(filePath).st_size
                 if upSize == downSize:
-                    print(wrapped.title + " already downloaded")
+                    print(f['title'] + " already downloaded")
                     needsDownload = False
 
             if needsDownload:
-                print("Downloading " + wrapped.title)
+                print("Downloading "+f['title'])
                 f.GetContentFile(filePath)
 
     def fileForName(self,name):
