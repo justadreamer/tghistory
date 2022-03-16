@@ -84,6 +84,13 @@ class DB:
             records = cur.fetchall()
             return records
 
+    def get_message(self, message_id):
+        with self.connection:
+            with self.connection.cursor() as cur:
+                cur.execute("select * from messages where id = %s", [message_id])
+                record = cur.fetchone()
+                return record
+
     def update_message_upload(self, message_id, uploaded):
         with self.connection:
             with self.connection.cursor() as cur:

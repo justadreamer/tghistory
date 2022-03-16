@@ -41,7 +41,8 @@ class Downloader:
         messages = history.messages
 
         for message in messages:
-            print(message)
+            print(f"c={channel.id} id={message.id} d={message.date.isoformat()}")
+
             message_dict = dict()
             offset_id = message.id
             date = message.date
@@ -76,13 +77,22 @@ class Downloader:
             if filename is not None:
                 filepath = f'download/{channel.id}/{filename}'
                 if not os.path.exists(filepath):
-                    print(f"downloading {filepath}")
-                    await self.client.download_media(message, filepath)
+                    dbmessage = self.db.get_message(message.id)
+                    uploaded = None
+                    if dbmessage is not None:
+                        uploaded = dbmessage[len(dbmessage) - 1]
+                    if uploaded is None:
+                        print(f"downloading {filepath}")
+                        await self.client.download_media(message, filepath)
+                    else:
+                        print(f"media {filepath} already uploaded to gdrive")
                 else:
                     print(f"{filepath} already downloaded")
                 metadata = filename
             elif url is not None:
                 metadata = url
+
+
             #save message into DB:
             self.db.store_message({ 'id': message.id,
                                'chat_id': channel.id,
