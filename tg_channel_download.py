@@ -18,12 +18,11 @@ from datetime import timezone
 from datetime import timedelta
 from yaml import Loader
 
-debug = True
-
 class Downloader:
-    def __init__(self, db, client):
+    def __init__(self, db, client, debug = False):
         self.db = db
         self.client = client
+        self.debug = debug
 
     async def download_history_batch(self, channel, offset_id):
         history = await self.client(GetHistoryRequest(
@@ -31,7 +30,7 @@ class Downloader:
             offset_id=offset_id,
             offset_date=None,
             add_offset=0,
-            limit=100 if not debug else 10,
+            limit=100 if not self.debug else 10,
             max_id=0,
             min_id=0,
             hash=0
@@ -119,7 +118,7 @@ class Downloader:
         while date > lower_bound_date:
             date, offset_id = await self.download_history_batch(channel, offset_id)
             print(date, offset_id)
-            if debug:
+            if self.debug:
                 break
 
 async def main():
@@ -135,8 +134,10 @@ async def main():
                                                                                config['dbport'])
     db = DB(connection_string=connection_string)
     client = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
-
-    downloader = Downloader(db, client)
+    debug = False
+    if 'debug' in config:
+        debug = config['debug']
+    downloader = Downloader(db, client, debug = debug)
     for chat in config['chats']:
         await downloader.download_chat(chat, redownload = config['redownload'])
 
