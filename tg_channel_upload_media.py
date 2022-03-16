@@ -22,7 +22,11 @@ download_dir = config['download'] if 'download' in config else 'download'
 
 def upload():
     for subdir in os.listdir(download_dir):
-        channel_id = int(subdir)
+        try:
+            channel_id = int(subdir)
+        except:
+            continue
+
         folder = Folder(PurePath(f'tghistory/{channel_id}'), createIfNotExists=True)
         messages = db.get_messages(chat_id=channel_id)
         if messages is not None:
