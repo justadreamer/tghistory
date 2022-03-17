@@ -1,6 +1,5 @@
 postgresdb
 .idea
-config.py
 __pycache__
 tghistory_analytics.pdf
 tghistory_analytics.html
