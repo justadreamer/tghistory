@@ -77,7 +77,7 @@ class Downloader:
             if filename is not None:
                 filepath = f'download/{channel.id}/{filename}'
                 if not os.path.exists(filepath):
-                    dbmessage = self.db.get_message(message.id)
+                    dbmessage = self.db.get_message(message_id=message.id, chat_id=channel.id)
                     uploaded = None
                     if dbmessage is not None:
                         uploaded = dbmessage[len(dbmessage) - 1]

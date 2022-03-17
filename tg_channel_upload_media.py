@@ -38,6 +38,6 @@ def upload():
                     filepath = os.path.join(download_dir, subdir, filename)
                     if os.path.exists(filepath):
                         gfile = folder.upload(filepath)
-                        db.update_message_upload(message_id, gfile['alternateLink'])
+                        db.update_message_upload(message_id=message_id, chat_id=channel_id, uploaded=gfile['alternateLink'])
 
 upload()
