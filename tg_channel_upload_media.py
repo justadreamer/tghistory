@@ -1,26 +1,13 @@
-import asyncio
-import yaml
-from yaml import Loader
-import os
-from postgres_connection import *
+from config import *
 from GoogleDriveWrapper import *
 
-#load config:
-with open('config.yml','r') as f:
-    config = yaml.load(f, Loader)['default']
-    print(config)
-
-# global service objects:
-connection_string = "dbname={} user={} password={} host={} port={}".format(config['dbname'],
-                                                               config['dbuser'],
-                                                               config['dbpassword'],
-                                                               config['dbhost'],
-                                                               config['dbport'])
-db = DB(connection_string=connection_string)
-
-download_dir = config['download'] if 'download' in config else 'download'
-
 def upload():
+    # load config:
+    config = get_config()
+    db = get_db()
+
+    download_dir = config['download'] if 'download' in config else 'download'
+
     for subdir in os.listdir(download_dir):
         try:
             channel_id = int(subdir)

@@ -96,3 +96,10 @@ class DB:
             with self.connection.cursor() as cur:
                 print(f'updating message id={message_id}, chat_id={chat_id}, with uploaded={uploaded}')
                 cur.execute('update messages set uploaded=%s where id=%s and chat_id=%s', (uploaded, message_id, chat_id))
+
+    def get_chats(self):
+        with self.connection:
+            with self.connection.cursor() as cur:
+                cur.execute('select * from chats')
+                records = cur.fetchall()
+                return records

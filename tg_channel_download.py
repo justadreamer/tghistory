@@ -1,7 +1,7 @@
 from telethon import TelegramClient
 import pprint
 from postgres_connection import DB
-import yaml
+from config import *
 import asyncio
 from telethon.tl.functions.messages import GetHistoryRequest
 
@@ -132,17 +132,8 @@ class Downloader:
                 break
 
 async def main():
-    # load config:
-    with open('config.yml', 'r') as f:
-        config = yaml.load(f, Loader)['default']
-        print(config)
-
-    connection_string = "dbname={} user={} password={} host={} port={}".format(config['dbname'],
-                                                                               config['dbuser'],
-                                                                               config['dbpassword'],
-                                                                               config['dbhost'],
-                                                                               config['dbport'])
-    db = DB(connection_string=connection_string)
+    config = get_config()
+    db = get_db()
     client = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
     debug = False
     if 'debug' in config:
