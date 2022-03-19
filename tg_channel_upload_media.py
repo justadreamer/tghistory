@@ -18,7 +18,6 @@ def upload():
         messages = db.get_messages(chat_id=channel_id)
         if messages is not None:
             for message in messages:
-                print(message)
                 message_id = message[0]
                 filename = message[len(message)-2]
                 if filename is not None:

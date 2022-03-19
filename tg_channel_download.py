@@ -1,6 +1,4 @@
 from telethon import TelegramClient
-import pprint
-from postgres_connection import DB
 from config import *
 import asyncio
 from telethon.tl.functions.messages import GetHistoryRequest
