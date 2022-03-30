@@ -52,7 +52,9 @@ class DB:
     def store_chat(self, chat):
         with self.connection:
             with self.connection.cursor() as cur:
-                cur.execute("insert into chats (id, title) values (%s, %s) on conflict do nothing", (chat['id'], chat['title']))
+                cur.execute("insert into chats (id, title, username) values (%s, %s, %s) on conflict (id) do update set (id, title, username) = (%s, %s, %s)",
+                            (chat['id'], chat['title'], chat['username'],
+                             chat['id'], chat['title'], chat['username']))
 
 
     def store_user(self, user):

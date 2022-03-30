@@ -2,6 +2,8 @@ from telethon import TelegramClient
 from config import *
 import asyncio
 from telethon.tl.functions.messages import GetHistoryRequest
+from telethon.tl.functions.channels import GetChannelsRequest
+from telethon.tl.functions.channels import JoinChannelRequest
 
 from telethon.tl.types import MessageMediaPhoto
 from telethon.tl.types import MessageMediaDocument
@@ -16,14 +18,14 @@ from datetime import timezone
 from datetime import timedelta
 from yaml import Loader
 
-class Downloader:
-    def __init__(self, db, client, debug = False):
+class ChatHistoryDownloader:
+    def __init__(self, db, tgclient, debug = False):
         self.db = db
-        self.client = client
+        self.tgclient = tgclient
         self.debug = debug
 
     async def download_history_batch(self, channel, offset_id):
-        history = await self.client(GetHistoryRequest(
+        history = await self.tgclient(GetHistoryRequest(
             peer=channel,
             offset_id=offset_id,
             offset_date=None,
@@ -35,11 +37,10 @@ class Downloader:
         ))
         min_date = datetime.now().replace(tzinfo=timezone(offset=timedelta()))
         offset_id = 0
-
         messages = history.messages
 
-        for message in messages:
-            print(f"c={channel.id} id={message.id} d={message.date.isoformat()}")
+        for (i,message) in enumerate(messages):
+            print(f"{channel.username} {i}/{len(messages)} d={message.date.isoformat()}")
 
             message_dict = dict()
             offset_id = message.id
@@ -81,7 +82,7 @@ class Downloader:
                         uploaded = dbmessage[len(dbmessage) - 1]
                     if uploaded is None:
                         print(f"downloading {filepath}")
-                        await self.client.download_media(message, filepath)
+                        await self.tgclient.download_media(message, filepath)
                     else:
                         print(f"media {filepath} already uploaded to gdrive")
                 else:
@@ -105,13 +106,31 @@ class Downloader:
 
         return min_date, offset_id
 
-    async def download_chat(self, chat_name, redownload = False):
-        print(chat_name)
-        await self.client.start()
-        dialogs = await self.client.get_dialogs()
-        dialog = list(filter(lambda dialog: dialog.name == chat_name, dialogs))[0]
-        channel = dialog.entity
-        self.db.store_chat( { 'id':channel.id, 'title':channel.title } )
+    async def resolve_channel(self, username):
+        dialogs = await self.tgclient.get_dialogs()
+        dialogs = list(filter(lambda dialog: dialog.entity.username == username, dialogs))
+        channel = None
+        if len(dialogs) == 0:  #channel not found
+            try:
+                channels = await self.tgclient(GetChannelsRequest(id=[username]))
+                channel = channels.chats[0]
+            except Exception as e:
+                print(e)
+            #await self.tgclient(JoinChannelRequest(channel=username))
+        else:
+            channel = dialogs[0].entity
+        if channel is not None:
+            self.db.store_chat({'id': channel.id, 'title': channel.title, 'username': channel.username})
+        return channel
+
+    async def download_chat(self, username, redownload = False):
+        await self.tgclient.start()
+        channel = await self.resolve_channel(username)
+
+        if channel is None:
+            print(f"could not find channel for {username}")
+        else:
+            print(f"channel {channel.username} resolved")
 
         if redownload:
             lower_bound_date = None
@@ -124,19 +143,21 @@ class Downloader:
         date = datetime.now().replace(tzinfo=timezone(offset=timedelta()))
         offset_id = 0
         while date > lower_bound_date:
+            print(f"BATCH for {channel.username} from {date}, offset={offset_id}")
             date, offset_id = await self.download_history_batch(channel, offset_id)
-            print(date, offset_id)
+
             if self.debug:
                 break
 
 async def main():
     config = get_config()
     db = get_db()
-    client = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
+    tgclient = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
     debug = False
+
     if 'debug' in config:
         debug = config['debug']
-    downloader = Downloader(db, client, debug = debug)
+    downloader = ChatHistoryDownloader(db, tgclient, debug = debug)
     for chat in config['chats']:
         await downloader.download_chat(chat, redownload = config['redownload'])
 

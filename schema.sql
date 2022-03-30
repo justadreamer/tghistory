@@ -16,7 +16,8 @@ create table if not exists messages (
 
 create table if not exists chats (
     id bigint primary key,
-    title varchar(255)
+    title varchar(255),
+    username varchar(255)
 );
 
 create table if not exists users (
