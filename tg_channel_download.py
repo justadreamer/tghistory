@@ -17,7 +17,7 @@ from datetime import datetime
 from datetime import timezone
 from datetime import timedelta
 from yaml import Loader
-import pprint
+from pprint import pprint
 
 class ChannelHistoryDownloader:
     def __init__(self, db, tgclient, username, debug = False):
