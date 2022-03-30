@@ -5,7 +5,6 @@ from yaml import Loader
 def get_config():
     with open('config.yml', 'r') as f:
         config = yaml.load(f, Loader)['default']
-        print(config)
     return config
 
 def get_db():
