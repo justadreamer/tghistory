@@ -18,11 +18,13 @@ from datetime import timezone
 from datetime import timedelta
 from yaml import Loader
 
-class ChatHistoryDownloader:
-    def __init__(self, db, tgclient, debug = False):
+class ChannelHistoryDownloader:
+    def __init__(self, db, tgclient, username, debug = False):
         self.db = db
         self.tgclient = tgclient
+        self.username = username
         self.debug = debug
+
 
     async def download_history_batch(self, channel, offset_id):
         history = await self.tgclient(GetHistoryRequest(
@@ -107,28 +109,16 @@ class ChatHistoryDownloader:
         return min_date, offset_id
 
     async def resolve_channel(self, username):
-        dialogs = await self.tgclient.get_dialogs()
-        dialogs = list(filter(lambda dialog: dialog.entity.username == username, dialogs))
-        channel = None
-        if len(dialogs) == 0:  #channel not found
-            try:
-                channels = await self.tgclient(GetChannelsRequest(id=[username]))
-                channel = channels.chats[0]
-            except Exception as e:
-                print(e)
-            #await self.tgclient(JoinChannelRequest(channel=username))
-        else:
-            channel = dialogs[0].entity
+        channels = await self.tgclient(GetChannelsRequest(id=[username]))
+        channel = channels.chats[0]
         if channel is not None:
             self.db.store_chat({'id': channel.id, 'title': channel.title, 'username': channel.username})
         return channel
 
-    async def download_chat(self, username, redownload = False):
-        await self.tgclient.start()
-        channel = await self.resolve_channel(username)
-
+    async def download_channel_history(self, redownload = False):
+        channel = await self.resolve_channel(self.username)
         if channel is None:
-            print(f"could not find channel for {username}")
+            print(f"could not find channel for {self.username}")
         else:
             print(f"channel {channel.username} resolved")
 
@@ -151,15 +141,23 @@ class ChatHistoryDownloader:
 
 async def main():
     config = get_config()
-    db = get_db()
-    tgclient = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
-    debug = False
+    pprint(config)
 
+    db = get_db()
+
+    tgclient = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
+    await tgclient.start()
+
+    debug = False
     if 'debug' in config:
         debug = config['debug']
-    downloader = ChatHistoryDownloader(db, tgclient, debug = debug)
-    for chat in config['chats']:
-        await downloader.download_chat(chat, redownload = config['redownload'])
+
+    downloads = []
+    for username in config['chats']:
+        downloader = ChannelHistoryDownloader(db, tgclient, username, debug=debug)
+        downloads.append(downloader.download_channel_history(redownload = config['redownload']))
+
+    await asyncio.wait(downloads)
 
 asyncio.run(main())
 
