@@ -1,4 +1,4 @@
-from postgres_connection import DB
+from db import DB
 import yaml
 from yaml import Loader
 
