@@ -80,9 +80,12 @@ class DB:
             max_date = record[0]
             return max_date
 
-    def get_messages(self, chat_id):
+    def get_messages(self, chat_id, has_no_uploaded=False):
         with self.connection.cursor() as cur:
-            cur.execute("select * from messages where chat_id = %s ", [chat_id])
+            query = "select * from messages where chat_id = %s "
+            if has_no_uploaded:
+                query = "select * from messages where chat_id = %s and uploaded is null"
+            cur.execute(query, [chat_id])
             records = cur.fetchall()
             return records
 

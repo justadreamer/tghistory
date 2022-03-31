@@ -3,7 +3,6 @@ from config import *
 import asyncio
 from telethon.tl.functions.messages import GetHistoryRequest
 from telethon.tl.functions.channels import GetChannelsRequest
-from telethon.tl.functions.channels import JoinChannelRequest
 
 from telethon.tl.types import MessageMediaPhoto
 from telethon.tl.types import MessageMediaDocument
@@ -16,7 +15,6 @@ import os
 from datetime import datetime
 from datetime import timezone
 from datetime import timedelta
-from yaml import Loader
 from pprint import pprint
 
 class ChannelHistoryDownloader:
