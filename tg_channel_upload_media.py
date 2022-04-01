@@ -17,8 +17,7 @@ class ChannelMediaUploader:
         self.subdir = subdir
         self.bucket_name = bucket_name
 
-    async def upload_channel(self):
-
+    def upload_channel(self):
         messages = self.db.get_messages(chat_id=self.channel_id, has_no_uploaded=True)
         if messages is None:
             return
@@ -32,13 +31,30 @@ class ChannelMediaUploader:
             if not os.path.exists(filepath):
                 continue
 
-            link = self.upload_file_bucket(filepath) #self.upload_file_gdrive(filepath)
+            link = self.upload_file_bucket(filepath, message_id) #self.upload_file_gdrive(filepath)
 
             if link is not None:
                 print(f'updating message id={message_id}, channel_id={self.channel_id}, with uploaded={link}')
                 self.db.update_message_upload(message_id=message_id, chat_id=self.channel_id, uploaded=link)
 
-    def upload_file_gdrive(self, filepath):  #deprecated, we are not uploading to gcloud bucket
+    def upload_file_bucket(self, filepath, message_id):
+        storage_client = storage.Client()
+        bucket: storage.Bucket = storage_client.bucket(self.bucket_name)
+
+        #rename using message_id - to avoid long filenames, need to download using message_id as well,
+        # preserving ext however as a hint to mime-type
+        filenameext = os.path.basename(filepath)
+        filename, ext = os.path.splitext(filenameext)
+        filename = f"{message_id}" + ext
+        #rename
+
+        destination_blob_name = f"{self.channel_id}/{filename}"
+        blob = bucket.blob(destination_blob_name)
+        blob.upload_from_filename(filepath)
+        return blob.public_url
+
+    #DEPRECATED
+    def upload_file_gdrive(self, filepath, message_id):  #deprecated, we are not uploading to gcloud bucket
         link = None
         for i in range(RETRIES):
             try:
@@ -51,16 +67,6 @@ class ChannelMediaUploader:
             except Exception as e:
                 print(f"retrying upload {filepath}, error: {e}")
         return link
-
-    def upload_file_bucket(self, filepath):
-        storage_client = storage.Client()
-        bucket: storage.Bucket = storage_client.bucket(self.bucket_name)
-        filename = os.path.basename(filepath)
-        destination_blob_name = f"{self.channel_id}/{filename}"
-        blob = bucket.blob(destination_blob_name)
-        blob.upload_from_filename(filepath)
-        return blob.public_url
-
 
 async def main():
     # load config:
@@ -79,11 +85,10 @@ async def main():
         try:
             channel_id = int(subdir)
             uploader = ChannelMediaUploader(db, download_dir, upload_dir, channel_id, subdir, bucket_name)
-            uploads.append(uploader.upload_channel())
+            uploader.upload_channel()
         except:
             continue
     print(f"uploading media for {len(uploads)} channels in parallel")
-    await asyncio.wait(uploads)
 
 asyncio.run(main())
 
