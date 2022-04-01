@@ -1,37 +1,66 @@
 from config import *
 from GoogleDriveWrapper import *
 import asyncio
+from google.cloud import storage
+from google.auth import credentials
 
-RETRIES = 3 # put into config
+RETRIES = 3 #put into config #deprecated we are now uploading to gcloud bucket
+
+# Set environment variable GOOGLE_APPLICATION_CREDENTIALS with the file of the service account key for gcloud bucket
 
 class ChannelMediaUploader:
-    def __init__(self, db, download_dir, upload_dir, channel_id, subdir):
+    def __init__(self, db, download_dir, upload_dir, channel_id, subdir, bucket_name):
         self.db = db
         self.download_dir = download_dir
         self.upload_dir = upload_dir
         self.channel_id = channel_id
         self.subdir = subdir
+        self.bucket_name = bucket_name
 
     async def upload_channel(self):
-        folder = Folder(PurePath(f'{self.upload_dir}/{self.channel_id}'), createIfNotExists=True)
+
         messages = self.db.get_messages(chat_id=self.channel_id, has_no_uploaded=True)
-        if messages is not None:
-            for message in messages:
-                message_id = message[0]
-                filename = message[len(message) - 2]
-                if filename is not None:
-                    filepath = os.path.join(self.download_dir, self.subdir, filename)
-                    if os.path.exists(filepath):
-                        gfile = None
-                        for i in range(RETRIES):
-                            try:
-                                print(f"uploading {filepath}")
-                                gfile = folder.upload(filepath)
-                                break
-                            except Exception as e:
-                                print(f"retying upload {filepath}, error: {e}")
-                        if gfile is not None:
-                            self.db.update_message_upload(message_id=message_id, chat_id=self.channel_id, uploaded=gfile['alternateLink'])
+        if messages is None:
+            return
+        print(f"processing {len(messages)} for channel {self.channel_id}")
+        for message in messages:
+            message_id = message[0]
+            filename = message[len(message) - 2]
+            if filename is None:
+                continue
+            filepath = os.path.join(self.download_dir, self.subdir, filename)
+            if not os.path.exists(filepath):
+                continue
+
+            link = self.upload_file_bucket(filepath) #self.upload_file_gdrive(filepath)
+
+            if link is not None:
+                print(f'updating message id={message_id}, channel_id={self.channel_id}, with uploaded={link}')
+                self.db.update_message_upload(message_id=message_id, chat_id=self.channel_id, uploaded=link)
+
+    def upload_file_gdrive(self, filepath):  #deprecated, we are not uploading to gcloud bucket
+        link = None
+        for i in range(RETRIES):
+            try:
+                print(f"uploading {filepath}")
+                folder = Folder(PurePath(f'{self.upload_dir}/{self.channel_id}'), createIfNotExists=True)
+                gfile = folder.upload(filepath)
+                if gfile is not None:
+                    link = gfile['alternateLink']
+                break
+            except Exception as e:
+                print(f"retrying upload {filepath}, error: {e}")
+        return link
+
+    def upload_file_bucket(self, filepath):
+        storage_client = storage.Client()
+        bucket: storage.Bucket = storage_client.bucket(self.bucket_name)
+        filename = os.path.basename(filepath)
+        destination_blob_name = f"{self.channel_id}/{filename}"
+        blob = bucket.blob(destination_blob_name)
+        blob.upload_from_filename(filepath)
+        return blob.public_url
+
 
 async def main():
     # load config:
@@ -40,13 +69,16 @@ async def main():
     uploads = []
     K_DOWNLOAD_DIR = 'download_dir'
     K_UPLOAD_DIR = 'gdrive_upload_dir'
-    download_dir = config[K_DOWNLOAD_DIR] if K_DOWNLOAD_DIR in config else 'download'
-    upload_dir = config[K_UPLOAD_DIR] if K_UPLOAD_DIR in config else 'tghistory'
+    K_BUCKET_NAME = 'bucket_name'
+    download_dir = config.get(K_DOWNLOAD_DIR, "download")
+    upload_dir = config.get(K_UPLOAD_DIR, "tghistory")
+    bucket_name = config.get(K_BUCKET_NAME, "tghistory")
+
     print(f"uploading to {upload_dir}")
     for subdir in os.listdir(download_dir):
         try:
             channel_id = int(subdir)
-            uploader = ChannelMediaUploader(db, download_dir, upload_dir, channel_id, subdir)
+            uploader = ChannelMediaUploader(db, download_dir, upload_dir, channel_id, subdir, bucket_name)
             uploads.append(uploader.upload_channel())
         except:
             continue

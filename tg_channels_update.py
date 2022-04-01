@@ -13,7 +13,9 @@ chats = db.get_chats()
 for chat in chats:
     id = chat[0]
     title = chat[1]
-    filename = f'{title}.csv'
+    username = chat[2]
+
+    filename = f'{username}.csv'
     psqllines.append(f'echo "\copy (select * from messages where chat_id={id} order by send_date) to \'{filename}\' delimiter \',\' csv header;" | psql -U tgclient tghistory\n')
     uploadlines.append(f'python upload.py "{filename}" tghistory\n')
 
