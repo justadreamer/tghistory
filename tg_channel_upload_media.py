@@ -80,7 +80,8 @@ async def main():
     upload_dir = config.get(K_UPLOAD_DIR, "tghistory")
     bucket_name = config.get(K_BUCKET_NAME, "tghistory")
 
-    print(f"uploading to {upload_dir}")
+    print(f"uploading media for {len(uploads)} channels to {bucket_name} GCS bucket")
+
     for subdir in os.listdir(download_dir):
         try:
             channel_id = int(subdir)
@@ -88,7 +89,7 @@ async def main():
             uploader.upload_channel()
         except:
             continue
-    print(f"uploading media for {len(uploads)} channels in parallel")
+
 
 asyncio.run(main())
 
