@@ -25,26 +25,24 @@ class ChannelHistoryDownloader:
         self.debug = debug
 
 
-    async def download_history_batch(self, channel, offset_id):
+    async def download_history_batch(self, channel, date):
         history = await self.tgclient(GetHistoryRequest(
             peer=channel,
-            offset_id=offset_id,
-            offset_date=None,
+            offset_id=0,
+            offset_date=date,
             add_offset=0,
             limit=100 if not self.debug else 10,
             max_id=0,
             min_id=0,
             hash=0
         ))
-        min_date = datetime.now().replace(tzinfo=timezone(offset=timedelta()))
-        offset_id = 0
+        min_date = date
         messages = history.messages
 
         for (i,message) in enumerate(messages):
-            print(f"{channel.username} {i}/{len(messages)} d={message.date.isoformat()}")
+            print(f"{channel.username} {i}/{len(messages)} id={message.id} d={message.date.isoformat()}")
 
             message_dict = dict()
-            offset_id = message.id
             date = message.date
             if date < min_date:
                 min_date = date
@@ -83,9 +81,11 @@ class ChannelHistoryDownloader:
                         uploaded = dbmessage[len(dbmessage) - 1]
                     if uploaded is None:
                         print(f"downloading {filepath}")
-                        await self.tgclient.download_media(message, filepath)
+                        if not self.debug:
+                            await self.tgclient.download_media(message, filepath)
                     else:
-                        print(f"media {filepath} already uploaded to gdrive")
+                        print(f"media {filepath} already uploaded")
+                        continue
                 else:
                     print(f"{filepath} already downloaded")
                 metadata = filename
@@ -105,7 +105,7 @@ class ChannelHistoryDownloader:
                                'metadata': metadata
                                })
 
-        return min_date, offset_id
+        return min_date
 
     async def resolve_channel(self, username):
         channels = await self.tgclient(GetChannelsRequest(id=[username]))
@@ -130,13 +130,15 @@ class ChannelHistoryDownloader:
             lower_bound_date = datetime.fromisoformat("2022-02-24 00:00:00").replace(tzinfo=timezone(offset=timedelta()))
 
         date = datetime.now().replace(tzinfo=timezone(offset=timedelta()))
-        offset_id = 0
         while date > lower_bound_date:
-            print(f"BATCH for {channel.username} from {date}, offset={offset_id}")
-            date, offset_id = await self.download_history_batch(channel, offset_id)
-
-            if self.debug:
+            print(f"BATCH for {channel.username} from {date}")
+            new_date = await self.download_history_batch(channel, date)
+            print(new_date)
+            if new_date >= date:
                 break
+            date = new_date
+            #if self.debug:
+             #   break
 
 async def main():
     config = get_config()
