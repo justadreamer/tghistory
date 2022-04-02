@@ -71,24 +71,17 @@ class ChannelMediaUploader:
 
 async def main():
     # load config:
-    config = get_config()
-    db = get_db()
-
-    K_DOWNLOAD_DIR = 'download_dir'
-    K_UPLOAD_DIR = 'gdrive_upload_dir'
-    K_BUCKET_NAME = 'bucket_name'
-    download_dir = config.get(K_DOWNLOAD_DIR, "download")
-    upload_dir = config.get(K_UPLOAD_DIR, "tghistory")
-    bucket_name = config.get(K_BUCKET_NAME, "tghistory")
-
+    config = Config()
+    db = config.get_db()
     chats = db.get_chats()
-    print(f"uploading media for {len(chats)} channels to {bucket_name} GCS bucket")
+
+    print(f"uploading media for {len(chats)} channels to {config.bucket_name} GCS bucket")
     uploaders = []
     for chat in chats:
         try:
             channel_id = chat[0]
             subdir = f"{channel_id}"
-            uploader = ChannelMediaUploader(db, download_dir, upload_dir, channel_id, subdir, bucket_name)
+            uploader = ChannelMediaUploader(db, config.download_dir, config.upload_dir, channel_id, subdir, config.bucket_name)
             uploaders.append(uploader.upload_channel())
         except:
             continue

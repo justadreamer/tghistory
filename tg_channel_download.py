@@ -31,7 +31,7 @@ class ChannelHistoryDownloader:
             offset_id=0,
             offset_date=date,
             add_offset=0,
-            limit=100 if not self.debug else 10,
+            limit=100,  # batch should be of significant size, so that we don't have this amount of messages per single date - f.e. a bunch of photos sent simultaneously, otherwise we'll stop fetching channel early
             max_id=0,
             min_id=0,
             hash=0
@@ -141,22 +141,17 @@ class ChannelHistoryDownloader:
              #   break
 
 async def main():
-    config = get_config()
-    pprint(config)
+    config = Config()
+    db = config.get_db()
 
-    db = get_db()
-
-    tgclient = TelegramClient(config['user_phone'], config['app_id'], config['api_hash'])
+    tgclient = TelegramClient(config.user_phone, config.app_id, config.api_hash)
     await tgclient.start()
 
-    debug = False
-    if 'debug' in config:
-        debug = config['debug']
+    debug = config.debug
 
-    downloads = []
-    for username in config['chats']:
-        downloader = ChannelHistoryDownloader(db, tgclient, username, debug=debug)
-        downloads.append(downloader.download_channel_history(redownload = config['redownload']))
+    downloads = list(map(lambda username: ChannelHistoryDownloader(db, tgclient, username, debug=debug)
+                         .download_channel_history(redownload = config.redownload), config.chats)
+                     )
 
     await asyncio.wait(downloads)
 
