@@ -72,7 +72,7 @@ async def main():
     # load config:
     config = get_config()
     db = get_db()
-    uploads = []
+
     K_DOWNLOAD_DIR = 'download_dir'
     K_UPLOAD_DIR = 'gdrive_upload_dir'
     K_BUCKET_NAME = 'bucket_name'
@@ -80,11 +80,13 @@ async def main():
     upload_dir = config.get(K_UPLOAD_DIR, "tghistory")
     bucket_name = config.get(K_BUCKET_NAME, "tghistory")
 
-    print(f"uploading media for {len(uploads)} channels to {bucket_name} GCS bucket")
+    chats = db.get_chats()
+    print(f"uploading media for {len(chats)} channels to {bucket_name} GCS bucket")
 
-    for subdir in os.listdir(download_dir):
+    for chat in chats:
         try:
-            channel_id = int(subdir)
+            channel_id = chat[0]
+            subdir = f"{channel_id}"
             uploader = ChannelMediaUploader(db, download_dir, upload_dir, channel_id, subdir, bucket_name)
             uploader.upload_channel()
         except:
