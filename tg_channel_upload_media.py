@@ -17,7 +17,7 @@ class ChannelMediaUploader:
         self.subdir = subdir
         self.bucket_name = bucket_name
 
-    def upload_channel(self):
+    async def upload_channel(self):
         messages = self.db.get_messages(chat_id=self.channel_id, has_no_uploaded=True)
         if messages is None:
             return
@@ -31,11 +31,12 @@ class ChannelMediaUploader:
             if not os.path.exists(filepath):
                 continue
 
-            link = self.upload_file_bucket(filepath, message_id) #self.upload_file_gdrive(filepath)
+            link = await asyncio.to_thread(self.upload_file_bucket, filepath, message_id) #self.upload_file_gdrive(filepath)
 
             if link is not None:
                 print(f'updating message id={message_id}, channel_id={self.channel_id}, with uploaded={link}')
                 self.db.update_message_upload(message_id=message_id, chat_id=self.channel_id, uploaded=link)
+                os.unlink(filepath) #delete file after uploading, to conserve space
 
     def upload_file_bucket(self, filepath, message_id):
         storage_client = storage.Client()
@@ -82,16 +83,17 @@ async def main():
 
     chats = db.get_chats()
     print(f"uploading media for {len(chats)} channels to {bucket_name} GCS bucket")
-
+    uploaders = []
     for chat in chats:
         try:
             channel_id = chat[0]
             subdir = f"{channel_id}"
             uploader = ChannelMediaUploader(db, download_dir, upload_dir, channel_id, subdir, bucket_name)
-            uploader.upload_channel()
+            uploaders.append(uploader.upload_channel())
         except:
             continue
 
+    await asyncio.wait(uploaders)
 
 asyncio.run(main())
 
