@@ -8,8 +8,10 @@ lines.append("python tg_channel_upload_media.py\n")
 
 psqllines = []
 uploadlines = []
-db = get_db()
+
+db = Config().get_db()
 chats = db.get_chats()
+
 for chat in chats:
     id = chat[0]
     title = chat[1]
