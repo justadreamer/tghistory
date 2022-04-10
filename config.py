@@ -1,4 +1,3 @@
-from db import DB
 import yaml
 from yaml import Loader
 
