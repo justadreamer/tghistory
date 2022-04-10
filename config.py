@@ -20,4 +20,6 @@ class Config:
         self.bucket_name = config.get('bucket_name')
 
     def sqlalchemy_connection_string(self):
-        return f"postgresql://{self.config['dbuser']}:{self.config['dbpassword']}@{self.config['dbhost']}:{self.config['dbport']}/{self.config['dbname']}"
+        connection_string=f"postgresql://{self.config['dbuser']}:{self.config['dbpassword']}@{self.config['dbhost']}:{self.config['dbport']}/{self.config['dbname']}"
+        print(connection_string)
+        return connection_string
