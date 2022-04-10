@@ -26,7 +26,10 @@ class MessageProcessor:
 
         #download
         gdriveFile = self.drive.CreateFile(metadata={'id':id})
-        gdriveFile.GetContentFile(filepath)
+        try:
+            gdriveFile.GetContentFile(filepath)
+        except Exception as e:
+            print(e)
 
         # upload it to gcs bucket with the corresponding path of chat_id/message_id.ext
         storage_client = storage.Client()
