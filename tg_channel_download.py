@@ -141,7 +141,12 @@ class ChannelHistoryDownloader:
 
         lower_bound_date = None
         if not redownload:
-            message = session.query(Message).where(Message.chat_id == channel.id).order_by(Message.send_date).first()
+            message = session\
+                .query(Message)\
+                .where(Message.chat_id == channel.id)\
+                .order_by(Message.send_date.desc())\
+                .limit(1)\
+                .first()
             if message is not None:
                 lower_bound_date = message.send_date
 
