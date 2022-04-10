@@ -20,6 +20,12 @@ class Config:
         self.bucket_name = config.get('bucket_name')
 
     def sqlalchemy_connection_string(self):
-        connection_string=f"postgresql://{self.config['dbuser']}:{self.config['dbpassword']}@{self.config['dbhost']}:{self.config['dbport']}/{self.config['dbname']}"
-        print(connection_string)
+        host = self.config['dbhost']
+        port = self.config['dbport']
+        if host is None or len(host) == 0: #use unix domain sockets
+            connection_string=f"postgresql://{self.config['dbuser']}:{self.config['dbpassword']}@/{self.config['dbname']}"
+        else:
+            connection_string=f"postgresql://{self.config['dbuser']}:{self.config['dbpassword']}@{self.config['dbhost']}:{self.config['dbport']}/{self.config['dbname']}"
+        if self.debug:
+            print(connection_string)
         return connection_string
