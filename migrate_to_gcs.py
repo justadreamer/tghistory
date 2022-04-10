@@ -45,7 +45,9 @@ class MessageProcessor:
 
     def main(self):
         messages = self.session.query(Message).filter(Message.uploaded.like('%drive.google.com%')).all()
-        self.drive = GoogleDrive()
+        auth = GoogleAuth()
+        auth.CommandLineAuth()
+        self.drive = GoogleDrive(auth = auth)
 
         print(f"processing {len(messages)} messages")
         for message in messages[:10]:

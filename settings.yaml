@@ -5,5 +5,7 @@ save_credentials_backend: file
 save_credentials_file: credentials.json
 save_credentials: true
 
+auth_method: service
+
 oauth_scope:
   - https://www.googleapis.com/auth/drive
