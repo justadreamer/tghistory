@@ -5,21 +5,22 @@ lines = []
 lines.append("#generated content\n")
 lines.append("python tg_channel_download.py\n")
 lines.append("python tg_channel_upload_media.py\n")
+from db import *
 
 psqllines = []
 uploadlines = []
 
-db = Config().get_db()
-chats = db.get_chats()
+config = Config()
+engine = create_sqlachemy_engine(config.sqlalchemy_connection_string())
+sessionfactory = session_factory(engine)
+session = scoped_session(sessionfactory)()
+
+chats = session.query(Chat).all()
 
 for chat in chats:
-    id = chat[0]
-    title = chat[1]
-    username = chat[2]
-
-    filename = f'{username}.csv'
-    psqllines.append(f'echo "\copy (select * from messages where chat_id={id} order by send_date) to \'{filename}\' delimiter \',\' csv header;" | psql -U tgclient tghistory\n')
-    uploadlines.append(f'python upload.py "{filename}" tghistory\n')
+    filename = f'{chat.username}.csv'
+    psqllines.append(f'echo "\copy (select * from messages where chat_id={chat.id} order by send_date) to \'{filename}\' delimiter \',\' csv header;" | psql -U tgclient tghistory\n')
+    uploadlines.append(f'python upload.py "{filename}" "{filename}" tghistory\n')
 
 with open('update.sh', 'w+') as f:
     f.writelines(lines)

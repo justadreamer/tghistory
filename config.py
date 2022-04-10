@@ -20,12 +20,5 @@ class Config:
         self.upload_dir = config.get('upload_dir')
         self.bucket_name = config.get('bucket_name')
 
-    def get_db(self):
-        config = self.config
-        connection_string = "dbname={} user={} password={} host={} port={}".format(config['dbname'],
-                                                                                   config['dbuser'],
-                                                                                   config['dbpassword'],
-                                                                                   config['dbhost'],
-                                                                                   config['dbport'])
-        db = DB(connection_string=connection_string)
-        return db
+    def sqlalchemy_connection_string(self):
+        return f"postgresql://{self.config['dbuser']}:{self.config['dbpassword']}@{self.config['dbhost']}:{self.config['dbport']}/{self.config['dbname']}"

@@ -3,14 +3,15 @@ from GoogleDriveWrapper import *
 import asyncio
 from google.cloud import storage
 from google.auth import credentials
+from db import *
 
 RETRIES = 3 #put into config #deprecated we are now uploading to gcloud bucket
 
 # Set environment variable GOOGLE_APPLICATION_CREDENTIALS with the file of the service account key for gcloud bucket
 
 class ChannelMediaUploader:
-    def __init__(self, db, download_dir, upload_dir, channel_id, subdir, bucket_name):
-        self.db = db
+    def __init__(self, sessionfactory, download_dir, upload_dir, channel_id, subdir, bucket_name):
+        self.sessionfactory = sessionfactory
         self.download_dir = download_dir
         self.upload_dir = upload_dir
         self.channel_id = channel_id
@@ -18,24 +19,31 @@ class ChannelMediaUploader:
         self.bucket_name = bucket_name
 
     async def upload_channel(self):
-        messages = self.db.get_messages(chat_id=self.channel_id, has_no_uploaded=True)
-        if messages is None:
+        Session = scoped_session(self.sessionfactory)
+        session = Session()
+
+        channel = session.query(Chat).where(Chat.id == self.channel_id).first()
+        messages = session.query(Message).where(Message.chat_id == self.channel_id).all()
+        if messages is None or len(messages) == 0:
             return
-        print(f"processing {len(messages)} for channel {self.channel_id}")
+
+        print(f"processing {len(messages)} for channel {channel.username} ({channel.id})")
         for message in messages:
-            message_id = message[0]
-            filename = message[len(message) - 2]
-            if filename is None:
+            if message.content_type == 'text' or message.content_type == 'web':
+                continue
+            filename = message._metadata
+            if filename is None or len(filename)==0:
                 continue
             filepath = os.path.join(self.download_dir, self.subdir, filename)
             if not os.path.exists(filepath):
                 continue
 
-            link = await asyncio.to_thread(self.upload_file_bucket, filepath, message_id) #self.upload_file_gdrive(filepath)
+            link = await asyncio.to_thread(self.upload_file_bucket, filepath, message.id) #self.upload_file_gdrive(filepath)
 
             if link is not None:
-                print(f'updating message id={message_id}, channel_id={self.channel_id}, with uploaded={link}')
-                self.db.update_message_upload(message_id=message_id, chat_id=self.channel_id, uploaded=link)
+                print(f'updating message id={message.id} ({message.send_date}), channel={channel.username}, with uploaded={link}')
+                message.uploaded = link
+                session.commit() #store uploaded into db
                 os.unlink(filepath) #delete file after uploading, to conserve space
 
     def upload_file_bucket(self, filepath, message_id):
@@ -72,16 +80,18 @@ class ChannelMediaUploader:
 async def main():
     # load config:
     config = Config()
-    db = config.get_db()
-    chats = db.get_chats()
+    engine = create_sqlachemy_engine(config.sqlalchemy_connection_string())
+    sessionfactory = sessionmaker(engine)
+    session = scoped_session(sessionfactory)
+
+    chats = session.query(Chat).all()
 
     print(f"uploading media for {len(chats)} channels to {config.bucket_name} GCS bucket")
     uploaders = []
     for chat in chats:
         try:
-            channel_id = chat[0]
-            subdir = f"{channel_id}"
-            uploader = ChannelMediaUploader(db, config.download_dir, config.upload_dir, channel_id, subdir, config.bucket_name)
+            subdir = f"{chat.id}"
+            uploader = ChannelMediaUploader(sessionfactory, config.download_dir, config.upload_dir, chat.id, subdir, config.bucket_name)
             uploaders.append(uploader.upload_channel())
         except:
             continue

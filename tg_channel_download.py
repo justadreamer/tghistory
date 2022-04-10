@@ -15,17 +15,31 @@ import os
 from datetime import datetime
 from datetime import timezone
 from datetime import timedelta
-from pprint import pprint
+
+from sqlalchemy.orm import session
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import scoped_session
+from db import create_sqlachemy_engine
+from db import session_factory
+from db import Chat
+from db import Message
+
+
 
 class ChannelHistoryDownloader:
-    def __init__(self, db, tgclient, username, debug = False):
-        self.db = db
+    def __init__(self, sessionfactory, tgclient, username, debug = False):
+        self.sessionfactory = sessionfactory
         self.tgclient = tgclient
         self.username = username
         self.debug = debug
 
+    def get_scoped_session(self):
+        Session = scoped_session(self.sessionfactory)
+        session = Session()
+        return session
 
     async def download_history_batch(self, channel, date):
+        session = self.get_scoped_session()
         history = await self.tgclient(GetHistoryRequest(
             peer=channel,
             offset_id=0,
@@ -41,12 +55,13 @@ class ChannelHistoryDownloader:
 
         for (i,message) in enumerate(messages):
             print(f"{channel.username} {i}/{len(messages)} id={message.id} d={message.date.isoformat()}")
+            dbmessage = session.query(Message).where(Message.id == message.id, Message.chat_id == channel.id).first()
 
-            message_dict = dict()
             date = message.date
             if date < min_date:
                 min_date = date
 
+            # figure out content type and metadata for media (filename, url etc.)
             media = message.media
             filename = None  #extract either filename or url as metadata to store with the message record in the DB
             url = None
@@ -69,62 +84,66 @@ class ChannelHistoryDownloader:
                     url = print(media.webpage.url)
                 content_type = 'web'
 
-
-            # download media
+            # download media if needed
             metadata = None
             if filename is not None:
                 filepath = f'download/{channel.id}/{filename}'
-                if not os.path.exists(filepath):
-                    dbmessage = self.db.get_message(message_id=message.id, chat_id=channel.id)
-                    uploaded = None
-                    if dbmessage is not None:
-                        uploaded = dbmessage[len(dbmessage) - 1]
-                    if uploaded is None:
+                if os.path.exists(filepath):
+                    print(f"media already downloaded: {filepath}")
+                    continue
+                else:
+                    if dbmessage is not None and dbmessage.uploaded is not None and len(dbmessage.uploaded)>0:
+                        print(f"media already uploaded: {filepath}")
+                        continue
+                    else:
                         print(f"downloading {filepath}")
                         if not self.debug:
                             await self.tgclient.download_media(message, filepath)
-                    else:
-                        print(f"media {filepath} already uploaded")
-                        continue
-                else:
-                    print(f"{filepath} already downloaded")
                 metadata = filename
             elif url is not None:
                 metadata = url
 
 
             #save message into DB:
-            self.db.store_message({ 'id': message.id,
-                               'chat_id': channel.id,
-                               'date': message.date,
-                               'sender_user_id': channel.id,
-                               'content': {
-                                   'text': message.message,
-                                   '@type': content_type
-                               },
-                               'metadata': metadata
-                               })
+            if dbmessage is None:
+                dbmessage = Message(id=message.id, chat_id=channel.id, send_date=message.date, sender_user_id=channel.id,
+                                content_type=content_type, _metadata=metadata, message_text=message.message)
+                session.add(dbmessage)
+            else:
+                dbmessage._metadata = metadata #update metadata
+            session.commit()
 
         return min_date
 
     async def resolve_channel(self, username):
+        session = self.get_scoped_session()
         channels = await self.tgclient(GetChannelsRequest(id=[username]))
         channel = channels.chats[0]
         if channel is not None:
-            self.db.store_chat({'id': channel.id, 'title': channel.title, 'username': channel.username})
+            chat = session.query(Chat).where(Chat.id == channel.id).first()
+            if chat is not None:
+                chat.title = channel.title
+                chat.username = channel.username
+            else:
+                chat = Chat.from_tg_channel(channel)
+                session.add(chat)
+            session.commit()
         return channel
 
     async def download_channel_history(self, redownload = False):
+        session = self.get_scoped_session()
         channel = await self.resolve_channel(self.username)
         if channel is None:
             print(f"could not find channel for {self.username}")
         else:
             print(f"channel {channel.username} resolved")
 
-        if redownload:
-            lower_bound_date = None
-        else:
-            lower_bound_date = self.db.get_last_stored_message_date(channel.id)
+
+        lower_bound_date = None
+        if not redownload:
+            message = session.query(Message).where(Message.chat_id == channel.id).order_by(Message.send_date).first()
+            if message is not None:
+                lower_bound_date = message.send_date
 
         if lower_bound_date is None:
             lower_bound_date = datetime.fromisoformat("2022-02-24 00:00:00").replace(tzinfo=timezone(offset=timedelta()))
@@ -142,18 +161,18 @@ class ChannelHistoryDownloader:
 
 async def main():
     config = Config()
-    db = config.get_db()
+    engine = create_sqlachemy_engine(config.sqlalchemy_connection_string())
+    sessionfactory = sessionmaker(engine)
 
     tgclient = TelegramClient(config.user_phone, config.app_id, config.api_hash)
     await tgclient.start()
 
     debug = config.debug
 
-    downloads = list(map(lambda username: ChannelHistoryDownloader(db, tgclient, username, debug=debug)
+    downloads = list(map(lambda username: ChannelHistoryDownloader(sessionfactory, tgclient, username, debug=debug)
                          .download_channel_history(redownload = config.redownload), config.chats)
                      )
 
     await asyncio.wait(downloads)
 
 asyncio.run(main())
-

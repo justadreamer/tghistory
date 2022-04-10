@@ -9,3 +9,13 @@ tghistory_analytics.log
 .R*
 config-*.yml
 .Rproj.user
+*.session
+client_secrets.json
+credentials.json
+download
+*.csv
+distilled_channel_list.txt
+server-config.yml
+tghistory-sa-key.json
+update.sh
+test.txt
