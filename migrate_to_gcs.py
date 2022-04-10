@@ -50,7 +50,7 @@ class MessageProcessor:
         self.drive = GoogleDrive(auth = auth)
 
         print(f"processing {len(messages)} messages")
-        for message in messages[:10]:
+        for message in messages:
             self.process_message(message)
 
 MessageProcessor().main()
