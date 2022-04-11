@@ -18,7 +18,9 @@ class MessageProcessor:
     def process_message(self, message):
         ext = os.path.splitext(message._metadata)[1]
         filename = f"{message.id}{ext}"
-        filepath = os.path.join(self.config.download_dir, f"{message.chat_id}", filename)
+        dir = os.path.join(self.config.download_dir, f"{message.chat_id}")
+        os.makedirs(dir, exist_ok=True)
+        filepath = os.path.join(dir, filename)
         print(f"{message.uploaded} downloading to {filepath}")
 
         components = message.uploaded.split('/')
