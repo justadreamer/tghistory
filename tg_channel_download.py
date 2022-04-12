@@ -68,10 +68,10 @@ class ChannelHistoryDownloader:
             content_type = 'text'
             if isinstance(media, MessageMediaDocument):
                 attributes: [DocumentAttributeFilename] = message.media.document.attributes
-
                 for attribute in attributes:
                     if isinstance(attribute, DocumentAttributeFilename):
-                        filename = attribute.file_name
+                        ext = os.path.splitext(attribute.file_name)[1]
+                        filename = f"{message.id}{ext}"
                         break
                     elif isinstance(attribute, DocumentAttributeVideo):
                         filename = f"{message.id}.mp4"
