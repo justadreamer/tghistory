@@ -29,13 +29,14 @@ class ChannelMediaUploader:
 
         print(f"processing {len(messages)} for channel {channel.username} ({channel.id})")
         for message in messages:
-            if message.content_type == 'text' or message.content_type == 'web':
-                continue
+            #if message.content_type == 'text' or message.content_type == 'web':
+                #continue
             filename = message._metadata
             if filename is None or len(filename)==0:
                 continue
             filepath = os.path.join(self.download_dir, self.subdir, filename)
             if not os.path.exists(filepath):
+                print(f"{channel.username} m.id={message.id}, {filepath} does not exist")
                 continue
 
             link = await asyncio.to_thread(self.upload_file_bucket, filepath, message.id) #self.upload_file_gdrive(filepath)
@@ -45,6 +46,8 @@ class ChannelMediaUploader:
                 message.uploaded = link
                 session.commit() #store uploaded into db
                 os.unlink(filepath) #delete file after uploading, to conserve space
+            else:
+                print(f"failed to upload message id={message.id} ({message.send_date}), channel={channel.username}")
 
     def upload_file_bucket(self, filepath, message_id):
         storage_client = storage.Client()
