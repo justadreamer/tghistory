@@ -79,7 +79,7 @@ class ChannelHistoryDownloader:
                 content_type = 'photo'
             elif isinstance(media, MessageMediaWebPage):
                 if isinstance(media.webpage, WebPage):
-                    url = print(media.webpage.url)
+                    url = media.webpage.url
                 content_type = 'web'
 
             # download media if needed
