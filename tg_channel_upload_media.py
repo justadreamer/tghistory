@@ -27,7 +27,7 @@ class ChannelMediaUploader:
         if messages is None or len(messages) == 0:
             return
 
-        print(f"processing {len(messages)} for channel {channel.username} ({channel.id})")
+        #print(f"processing {len(messages)} for channel {channel.username} ({channel.id})")
         for message in messages:
             #if message.content_type == 'text' or message.content_type == 'web':
                 #continue
@@ -42,7 +42,7 @@ class ChannelMediaUploader:
             link = await asyncio.to_thread(self.upload_file_bucket, filepath, message.id) #self.upload_file_gdrive(filepath)
 
             if link is not None:
-                print(f'updating message id={message.id} ({message.send_date}), channel={channel.username}, with uploaded={link}')
+                #print(f'updating message id={message.id} ({message.send_date}), channel={channel.username}, with uploaded={link}')
                 message.uploaded = link
                 session.commit() #store uploaded into db
                 os.unlink(filepath) #delete file after uploading, to conserve space

@@ -24,8 +24,6 @@ from db import session_factory
 from db import Chat
 from db import Message
 
-
-
 class ChannelHistoryDownloader:
     def __init__(self, sessionfactory, tgclient, username, debug = False):
         self.sessionfactory = sessionfactory
@@ -54,7 +52,7 @@ class ChannelHistoryDownloader:
         messages = history.messages
 
         for (i,message) in enumerate(messages):
-            print(f"{channel.username} {i}/{len(messages)} id={message.id} d={message.date.isoformat()}")
+            #print(f"{channel.username} {i}/{len(messages)} id={message.id} d={message.date.isoformat()}")
             dbmessage = session.query(Message).where(Message.id == message.id, Message.chat_id == channel.id).first()
 
             date = message.date
@@ -89,14 +87,14 @@ class ChannelHistoryDownloader:
             if filename is not None:
                 filepath = f'download/{channel.id}/{filename}'
                 if os.path.exists(filepath):
-                    print(f"media already downloaded: {filepath}")
+                    #print(f"media already downloaded: {filepath}")
                     continue
                 else:
                     if dbmessage is not None and dbmessage.uploaded is not None and len(dbmessage.uploaded)>0:
-                        print(f"media already uploaded: {filepath}")
+                        #print(f"media already uploaded: {filepath}")
                         continue
                     else:
-                        print(f"downloading {filepath}")
+                        #print(f"downloading {filepath}")
                         if not self.debug:
                             await self.tgclient.download_media(message, filepath)
                 metadata = filename
@@ -135,9 +133,6 @@ class ChannelHistoryDownloader:
         channel = await self.resolve_channel(self.username)
         if channel is None:
             print(f"could not find channel for {self.username}")
-        else:
-            print(f"channel {channel.username} resolved")
-
 
         lower_bound_date = None
         if not redownload:
@@ -155,9 +150,9 @@ class ChannelHistoryDownloader:
 
         date = datetime.now().replace(tzinfo=timezone(offset=timedelta()))
         while date > lower_bound_date:
-            print(f"BATCH for {channel.username} from {date}")
+            #print(f"BATCH for {channel.username} from {date}")
             new_date = await self.download_history_batch(channel, date)
-            print(new_date)
+            #print(new_date)
             if new_date >= date:
                 break
             date = new_date
