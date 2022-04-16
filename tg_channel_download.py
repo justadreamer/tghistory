@@ -59,6 +59,9 @@ class ChannelHistoryDownloader:
             if date < min_date:
                 min_date = date
 
+            if dbmessage is not None and dbmessage.uploaded is not None:
+                continue
+
             # figure out content type and metadata for media (filename, url etc.)
             media = message.media
             filename = None  #extract either filename or url as metadata to store with the message record in the DB
@@ -86,17 +89,10 @@ class ChannelHistoryDownloader:
             metadata = None
             if filename is not None:
                 filepath = f'download/{channel.id}/{filename}'
-                if os.path.exists(filepath):
-                    #print(f"media already downloaded: {filepath}")
-                    continue
-                else:
-                    if dbmessage is not None and dbmessage.uploaded is not None and len(dbmessage.uploaded)>0:
-                        #print(f"media already uploaded: {filepath}")
-                        continue
-                    else:
-                        #print(f"downloading {filepath}")
-                        if not self.debug:
-                            await self.tgclient.download_media(message, filepath)
+                if not os.path.exists(filepath):
+                    #print(f"downloading {filepath}")
+                    if not self.debug:
+                        await self.tgclient.download_media(message, filepath)
                 metadata = filename
             elif url is not None:
                 metadata = url
@@ -107,8 +103,9 @@ class ChannelHistoryDownloader:
                 dbmessage = Message(id=message.id, chat_id=channel.id, send_date=message.date, sender_user_id=channel.id,
                                 content_type=content_type, _metadata=metadata, message_text=message.message)
                 session.add(dbmessage)
-            else:
-                dbmessage._metadata = metadata #update metadata
+            else: #update metadata
+                dbmessage.content_type = content_type
+                dbmessage._metadata = metadata
             session.commit()
 
         return min_date
