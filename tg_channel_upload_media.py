@@ -22,10 +22,10 @@ class ChannelMediaUploader:
 
         channel = session.query(Chat).where(Chat.id == self.channel_id).first()
         messages = session.query(Message).where(Message.chat_id == self.channel_id,
-                                                not Message.content_type == 'web',
-                                                not Message.content_type == 'text',
-                                                Message.uploaded is None,
-                                                Message._metadata is not None).all()
+                                                Message.content_type != 'web',
+                                                Message.content_type != 'text',
+                                                Message.uploaded == None,
+                                                Message._metadata != None).all()
 
         if messages is None or len(messages) == 0:
             return
