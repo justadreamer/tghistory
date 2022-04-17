@@ -52,38 +52,17 @@ class ChannelHistoryDownloader:
         messages = history.messages
 
         for (i,message) in enumerate(messages):
-            #print(f"{channel.username} {i}/{len(messages)} id={message.id} d={message.date.isoformat()}")
-            dbmessage = session.query(Message).where(Message.id == message.id, Message.chat_id == channel.id).first()
-
             date = message.date
             if date < min_date:
                 min_date = date
 
-            if dbmessage is not None and dbmessage.uploaded is not None:
+            dbmessage = session.query(Message).where(Message.id == message.id, Message.chat_id == channel.id).first()
+            if dbmessage is not None and (dbmessage.uploaded is not None
+                                          or dbmessage.content_type == 'text'
+                                          or dbmessage.content_type == 'web'):
                 continue
 
-            # figure out content type and metadata for media (filename, url etc.)
-            media = message.media
-            filename = None  #extract either filename or url as metadata to store with the message record in the DB
-            url = None
-            content_type = 'text'
-            if isinstance(media, MessageMediaDocument):
-                attributes: [DocumentAttributeFilename] = message.media.document.attributes
-                for attribute in attributes:
-                    if isinstance(attribute, DocumentAttributeFilename):
-                        ext = os.path.splitext(attribute.file_name)[1]
-                        filename = f"{message.id}{ext}"
-                        break
-                    elif isinstance(attribute, DocumentAttributeVideo):
-                        filename = f"{message.id}.mp4"
-                        content_type = 'video'
-            elif isinstance(media, MessageMediaPhoto):
-                filename = f"{message.id}.jpeg"
-                content_type = 'photo'
-            elif isinstance(media, MessageMediaWebPage):
-                if isinstance(media.webpage, WebPage):
-                    url = media.webpage.url
-                content_type = 'web'
+            content_type, filename, url = self.analyze_metadata(message)
 
             # download media if needed
             metadata = None
@@ -110,10 +89,41 @@ class ChannelHistoryDownloader:
 
         return min_date
 
+    def analyze_metadata(self, message):
+        # figure out content type and metadata for media (filename, url etc.)
+        media = message.media
+        filename = None  # extract either filename or url as metadata to store with the message record in the DB
+        url = None
+        content_type = 'text'
+        if isinstance(media, MessageMediaDocument):
+            attributes: [DocumentAttributeFilename] = message.media.document.attributes
+            for attribute in attributes:
+                if isinstance(attribute, DocumentAttributeFilename):
+                    ext = os.path.splitext(attribute.file_name)[1]
+                    filename = f"{message.id}{ext}"
+                    break
+                elif isinstance(attribute, DocumentAttributeVideo):
+                    filename = f"{message.id}.mp4"
+                    content_type = 'video'
+        elif isinstance(media, MessageMediaPhoto):
+            filename = f"{message.id}.jpeg"
+            content_type = 'photo'
+        elif isinstance(media, MessageMediaWebPage):
+            if isinstance(media.webpage, WebPage):
+                url = media.webpage.url
+            content_type = 'web'
+        return content_type, filename, url
+
     async def resolve_channel(self, username):
         session = self.get_scoped_session()
-        channels = await self.tgclient(GetChannelsRequest(id=[username]))
-        channel = channels.chats[0]
+        channels = None
+        channel = None
+        try:
+            channels = await self.tgclient(GetChannelsRequest(id=[username]))
+        except Exception as e:
+            print(e)
+        if channels is not None and len(channels.chats)>0:
+            channel = channels.chats[0]
         if channel is not None:
             chat = session.query(Chat).where(Chat.id == channel.id).first()
             if chat is not None:
@@ -131,30 +141,31 @@ class ChannelHistoryDownloader:
         if channel is None:
             print(f"could not find channel for {self.username}")
 
-        lower_bound_date = None
-        if not redownload:
-            message = session\
-                .query(Message)\
-                .where(Message.chat_id == channel.id)\
-                .order_by(Message.send_date.desc())\
-                .limit(1)\
-                .first()
-            if message is not None:
-                lower_bound_date = message.send_date
-
-        if lower_bound_date is None:
-            lower_bound_date = datetime.fromisoformat("2022-02-24 00:00:00").replace(tzinfo=timezone(offset=timedelta()))
+        lower_bound_date = self.get_lower_bound_date(channel, redownload, session)
 
         date = datetime.now().replace(tzinfo=timezone(offset=timedelta()))
         while date > lower_bound_date:
-            #print(f"BATCH for {channel.username} from {date}")
             new_date = await self.download_history_batch(channel, date)
-            #print(new_date)
-            if new_date >= date:
+            if new_date >= date: # to eliminate cases when date is not decreasing, f.e. channel never reaches lower_bound_date
                 break
             date = new_date
-            #if self.debug:
-             #   break
+
+    def get_lower_bound_date(self, channel, redownload, session):
+        lower_bound_date = None
+        if not redownload:
+            message = session \
+                .query(Message) \
+                .where(Message.chat_id == channel.id) \
+                .order_by(Message.send_date.desc()) \
+                .limit(1) \
+                .first()
+            if message is not None:
+                lower_bound_date = message.send_date
+        if lower_bound_date is None:
+            lower_bound_date = datetime.fromisoformat("2022-02-24 00:00:00").replace(
+                tzinfo=timezone(offset=timedelta()))
+        return lower_bound_date
+
 
 async def main():
     config = Config()
@@ -166,9 +177,14 @@ async def main():
 
     debug = config.debug
 
-    downloads = list(map(lambda username: ChannelHistoryDownloader(sessionfactory, tgclient, username, debug=debug)
-                         .download_channel_history(redownload = config.redownload), config.chats)
-                     )
+    downloads = list(
+        map(
+            lambda username: asyncio.create_task(
+                ChannelHistoryDownloader(sessionfactory, tgclient, username, debug=debug)
+                         .download_channel_history(redownload = config.redownload)
+            ), config.chats
+        )
+    )
 
     await asyncio.wait(downloads)
 

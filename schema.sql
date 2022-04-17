@@ -9,7 +9,7 @@ create table if not exists messages (
     sender_user_id bigint not null,
     content_type varchar(255),
     message_text text, -- if content_type is messageText,
-    metadata varchar(255),
+    metadata text,
     uploaded varchar(255),
     constraint pkey (id, chat_id)
 );
