@@ -16,7 +16,7 @@ class ChannelMediaUploader:
         self.subdir = subdir
         self.bucket_name = bucket_name
 
-    async def upload_channel(self):
+    def upload_channel(self):
         Session = scoped_session(self.sessionfactory)
         session = Session()
 
@@ -40,7 +40,7 @@ class ChannelMediaUploader:
                 #print(f"{channel.username} m.id={message.id}, {filepath} does not exist")
                 continue
 
-            link = await asyncio.to_thread(self.upload_file_bucket, filepath, message.id)
+            link = self.upload_file_bucket(filepath, message.id)
 
             if link is not None:
                 message.uploaded = link
@@ -65,7 +65,7 @@ class ChannelMediaUploader:
         blob.upload_from_filename(filepath)
         return blob.public_url
 
-async def main():
+def main():
     # load config:
     config = Config()
     engine = create_sqlachemy_engine(config.sqlalchemy_connection_string())
@@ -80,11 +80,10 @@ async def main():
         try:
             subdir = f"{chat.id}"
             uploader = ChannelMediaUploader(sessionfactory, config.download_dir, config.upload_dir, chat.id, subdir, config.bucket_name)
-            uploaders.append(uploader.upload_channel())
-        except:
+            uploader.upload_channel()
+        except Exception as e:
+            print(e)
             continue
 
-    await asyncio.wait(uploaders)
-
-asyncio.run(main())
+main()
 
