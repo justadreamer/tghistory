@@ -30,7 +30,7 @@ class ChannelMediaUploader:
         if messages is None or len(messages) == 0:
             return
 
-        #print(f"processing {len(messages)} for channel {channel.username} ({channel.id})")
+        print(f"processing {len(messages)} for channel {channel.username} ({channel.id})")
         for message in messages:
             filename = message._metadata
             if filename is None or len(filename)==0:
